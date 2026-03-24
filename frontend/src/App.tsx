@@ -1,6 +1,6 @@
 // Placeholder for App.tsx
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { ConfigProvider, Layout, Menu, theme } from 'antd';
 import { HomeOutlined, CalendarOutlined, LoginOutlined } from '@ant-design/icons';
 
@@ -8,9 +8,31 @@ import { HomeOutlined, CalendarOutlined, LoginOutlined } from '@ant-design/icons
 import Home from './pages/Home';
 import Events from './pages/Events';
 import EventDetails from './pages/EventDetails';
-import Auth from './pages/Auth';
+import Login from './pages/Login'; // Обновено от Auth на Login
 
 const { Header, Content, Footer } = Layout;
+
+// Компонент за навигационното меню, който автоматично маркира активния път
+const AppMenu: React.FC = () => {
+  const location = useLocation();
+  const currentKey = location.pathname === '/' ? '1' : 
+                    location.pathname.startsWith('/events') ? '2' : 
+                    location.pathname === '/login' ? '3' : '1';
+
+  return (
+    <Menu
+      theme="dark"
+      mode="horizontal"
+      selectedKeys={[currentKey]}
+      style={{ flex: 1, minWidth: 0, borderBottom: 'none' }}
+      items={[
+        { key: '1', icon: <HomeOutlined />, label: <Link to="/">Начало</Link> },
+        { key: '2', icon: <CalendarOutlined />, label: <Link to="/events">Събития</Link> },
+        { key: '3', icon: <LoginOutlined />, label: <Link to="/login">Вход</Link> },
+      ]}
+    />
+  );
+};
 
 const App: React.FC = () => {
   const {
@@ -46,17 +68,7 @@ const App: React.FC = () => {
             }}>
               SUBITIQ VBG
             </div>
-            <Menu
-              theme="dark"
-              mode="horizontal"
-              defaultSelectedKeys={['1']}
-              style={{ flex: 1, minWidth: 0, borderBottom: 'none' }}
-              items={[
-                { key: '1', icon: <HomeOutlined />, label: <Link to="/">Начало</Link> },
-                { key: '2', icon: <CalendarOutlined />, label: <Link to="/events">Събития</Link> },
-                { key: '3', icon: <LoginOutlined />, label: <Link to="/auth">Вход</Link> },
-              ]}
-            />
+            <AppMenu />
           </Header>
           <Content style={{ padding: '0' }}>
             <div style={{ minHeight: 'calc(100vh - 134px)' }}>
@@ -64,7 +76,7 @@ const App: React.FC = () => {
                 <Route path="/" element={<Home />} />
                 <Route path="/events" element={<Events />} />
                 <Route path="/events/:id" element={<EventDetails />} />
-                <Route path="/auth" element={<Auth />} />
+                <Route path="/login" element={<Login />} />
               </Routes>
             </div>
           </Content>
