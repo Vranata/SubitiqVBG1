@@ -1,6 +1,7 @@
 // App.tsx
 import React from 'react';
 import { Route, Link } from 'atomic-router-react';
+import logo from './assets/logo.svg';
 import { ConfigProvider, Layout, Menu } from 'antd';
 import { HomeOutlined, CalendarOutlined, LoginOutlined } from '@ant-design/icons';
 import { routes } from './shared/routing';
@@ -61,14 +62,9 @@ const App: React.FC = () => {
           width: '100%',
           padding: '0 24px'
         }}>
-          <div className="demo-logo" style={{ 
-            color: 'white', 
-            marginRight: '48px', 
-            fontWeight: 800, 
-            fontSize: '1.25rem',
-            letterSpacing: '1px'
-          }}>
-            SUBITIQ VBG
+          <div className="demo-logo" style={{ display: 'flex', alignItems: 'center', marginRight: '24px' }}>
+            <img src={logo} alt="CULTURO BG" style={{ height: 36, marginRight: 12 }} />
+            <span style={{ color: 'white', fontWeight: 700, fontSize: '1rem', letterSpacing: '0.5px' }}>CULTURO BG</span>
           </div>
           <AppMenu />
         </Header>
@@ -81,7 +77,7 @@ const App: React.FC = () => {
           </div>
         </Content>
         <Footer style={{ textAlign: 'center', background: '#001529', color: 'rgba(255,255,255,0.65)', padding: '24px 50px' }}>
-          <div style={{ marginBottom: '12px', color: '#fff' }}>SUBITIQ VBG</div>
+          <div style={{ marginBottom: '12px', color: '#fff' }}>CULTURO BG</div>
           ©{new Date().getFullYear()} Created for Diploma Project • Итеративен модел на разработка
         </Footer>
       </Layout>
