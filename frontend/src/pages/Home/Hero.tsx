@@ -1,13 +1,12 @@
 import React from 'react';
 import { Typography, Button, Space } from 'antd';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'atomic-router-react';
 import { CalendarOutlined } from '@ant-design/icons';
+import { routes } from '../../shared/routing';
 
 const { Title, Paragraph } = Typography;
 
 const Hero: React.FC = () => {
-  const navigate = useNavigate();
-
   return (
     <div
       style={{
@@ -26,15 +25,16 @@ const Hero: React.FC = () => {
         Платформа за персонализирано представяне и лесен достъп до културни, спортни и обществени мероприятия във вашия град.
       </Paragraph>
       <Space size="large">
-        <Button
-          type="primary"
-          size="large"
-          icon={<CalendarOutlined />}
-          onClick={() => navigate('/events')}
-          style={{ height: '50px', padding: '0 40px', fontSize: '1.2rem', borderRadius: '25px', border: 'none', background: '#fff', color: '#1890ff' }}
-        >
-          Към събитията
-        </Button>
+        <Link to={routes.events}>
+          <Button
+            type="primary"
+            size="large"
+            icon={<CalendarOutlined />}
+            style={{ height: '50px', padding: '0 40px', fontSize: '1.2rem', borderRadius: '25px', border: 'none', background: '#fff', color: '#1890ff' }}
+          >
+            Към събитията
+          </Button>
+        </Link>
       </Space>
     </div>
   );
