@@ -1,11 +1,19 @@
 import React from 'react'
 import { createRoot } from 'react-dom/client'
+import { RouterProvider } from 'atomic-router-react'
 import App from './App'
+import { router, history } from './shared/routing'
 import 'antd/dist/reset.css'
+
+// 1. Set the history for the router
+router.setHistory(history)
 
 const root = createRoot(document.getElementById('root') as HTMLElement)
 root.render(
   <React.StrictMode>
-    <App />
+    <RouterProvider router={router}>
+      <App />
+    </RouterProvider>
   </React.StrictMode>
 )
+

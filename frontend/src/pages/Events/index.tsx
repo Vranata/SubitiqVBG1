@@ -1,33 +1,46 @@
-import React, { useState, useMemo } from 'react';
-import { Card, Col, Row, Button, Tag, Typography, Space, Input, Select, Empty } from 'antd';
+import React from 'react';
+import { Card, Col, Row, Button, Tag, Typography, Space, Input, Select } from 'antd';
 import { CalendarOutlined, EnvironmentOutlined, ArrowRightOutlined, SearchOutlined } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
-import { DUMMY_EVENTS } from '../../services/constants';
+import { useUnit } from 'effector-react';
+import { Link } from 'atomic-router-react';
+import { 
+  $filteredEvents, 
+  $searchText, 
+  $selectedCity, 
+  $selectedCategory,
+  $uniqueCities,
+  $uniqueCategories,
+  searchChanged,
+  cityChanged,
+  categoryChanged
+} from '../../entities/events/model';
+import { routes } from '../../shared/routing';
 
-const { Title, Paragraph, Text } = Typography;
+const { Title, Paragraph } = Typography;
 const { Search } = Input;
 
 const Events: React.FC = () => {
-  const navigate = useNavigate();
-  const [searchText, setSearchText] = useState('');
-  const [selectedCity, setSelectedCity] = useState<string | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-
-  // Извличане на уникални градове и категории за филтрите
-  const cities = useMemo(() => Array.from(new Set(DUMMY_EVENTS.map(e => e.city))), []);
-  const categories = useMemo(() => Array.from(new Set(DUMMY_EVENTS.map(e => e.category))), []);
-
-  // Логика за филтриране
-  const filteredEvents = useMemo(() => {
-    return DUMMY_EVENTS.filter(event => {
-      const matchesSearch = event.title.toLowerCase().includes(searchText.toLowerCase()) || 
-                           event.description.toLowerCase().includes(searchText.toLowerCase());
-      const matchesCity = !selectedCity || event.city === selectedCity;
-      const matchesCategory = !selectedCategory || event.category === selectedCategory;
-      
-      return matchesSearch && matchesCity && matchesCategory;
-    });
-  }, [searchText, selectedCity, selectedCategory]);
+  const {
+    filteredEvents,
+    searchText,
+    selectedCity,
+    selectedCategory,
+    cities,
+    categories,
+    onSearch,
+    onCityChange,
+    onCategoryChange
+  } = useUnit({
+    filteredEvents: $filteredEvents,
+    searchText: $searchText,
+    selectedCity: $selectedCity,
+    selectedCategory: $selectedCategory,
+    cities: $uniqueCities,
+    categories: $uniqueCategories,
+    onSearch: searchChanged,
+    onCityChange: cityChanged,
+    onCategoryChange: categoryChanged
+  });
 
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '40px 24px' }}>
@@ -43,8 +56,9 @@ const Events: React.FC = () => {
               allowClear 
               enterButton={<SearchOutlined />} 
               size="large"
-              onSearch={value => setSearchText(value)}
-              onChange={e => setSearchText(e.target.value)}
+              value={searchText}
+              onSearch={onSearch}
+              onChange={e => onSearch(e.target.value)}
             />
           </Col>
           <Col xs={12} md={7}>
@@ -53,7 +67,8 @@ const Events: React.FC = () => {
               style={{ width: '100%' }}
               size="large"
               allowClear
-              onChange={value => setSelectedCity(value)}
+              value={selectedCity}
+              onChange={onCityChange}
               options={cities.map(city => ({ label: city, value: city }))}
             />
           </Col>
@@ -63,7 +78,8 @@ const Events: React.FC = () => {
               style={{ width: '100%' }}
               size="large"
               allowClear
-              onChange={value => setSelectedCategory(value)}
+              value={selectedCategory}
+              onChange={onCategoryChange}
               options={categories.map(cat => ({ label: cat, value: cat }))}
             />
           </Col>
@@ -84,14 +100,14 @@ const Events: React.FC = () => {
                   />
                 }
                 actions={[
-                  <Button 
-                    type="link" 
-                    key="view" 
-                    icon={<ArrowRightOutlined />} 
-                    onClick={() => navigate(`/events/${event.id}`)}
-                  >
-                    Виж повече
-                  </Button>,
+                  <Link to={routes.eventDetails} params={{ id: event.id }} key="view-link">
+                    <Button 
+                      type="link" 
+                      icon={<ArrowRightOutlined />} 
+                    >
+                      Виж повече
+                    </Button>
+                  </Link>,
                 ]}
                 style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
                 styles={{ body: { flex: 1, display: 'flex', flexDirection: 'column' }}}
@@ -107,32 +123,24 @@ const Events: React.FC = () => {
                 >
                   {event.description}
                 </Paragraph>
-                
-                <Space direction="vertical" size={2} style={{ marginTop: 'auto' }}>
-                  <Space>
-                    <EnvironmentOutlined style={{ color: '#1890ff' }} />
-                    <Text strong>{event.city}</Text>
-                  </Space>
-                  <Space>
-                    <CalendarOutlined style={{ color: '#1890ff' }} />
-                    <Text type="secondary">{event.date}</Text>
-                  </Space>
+                <Space size="small">
+                  <EnvironmentOutlined /> {event.city}
+                  <CalendarOutlined style={{ marginLeft: '8px' }} /> {event.date}
                 </Space>
               </Card>
             </Col>
           ))}
         </Row>
       ) : (
-        <div style={{ padding: '80px 0' }}>
-          <Empty 
-            description={
-              <span>Няма намерени събития, отговарящи на вашите филтри.</span>
-            } 
-          >
-            <Button type="primary" onClick={() => { setSearchText(''); setSelectedCity(null); setSelectedCategory(null); }}>
-              Изчисти филтрите
+        <div style={{ textAlign: 'center', padding: '100px 0' }}>
+            <Title level={4} type="secondary">Няма намерени събития по тези критерии.</Title>
+            <Button type="primary" onClick={() => {
+                onSearch('');
+                onCityChange(null);
+                onCategoryChange(null);
+            }}>
+                Изчисти филтрите
             </Button>
-          </Empty>
         </div>
       )}
     </div>
