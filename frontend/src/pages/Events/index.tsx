@@ -1,21 +1,23 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Col, Row, Button, Tag, Typography, Space, Input, Select, Spin } from 'antd';
-import { CalendarOutlined, CloseCircleOutlined, DownCircleOutlined, EnvironmentOutlined, ArrowRightOutlined, SearchOutlined } from '@ant-design/icons';
+import dayjs from 'dayjs';
+import { Button, Card, Col, DatePicker, Input, Row, Select, Space, Spin, Tag, Typography } from 'antd';
+import { ArrowRightOutlined, CalendarOutlined, CloseCircleOutlined, DownCircleOutlined, EnvironmentOutlined, SearchOutlined } from '@ant-design/icons';
 import { useUnit } from 'effector-react';
 import { Link } from 'atomic-router-react';
-import { 
+import {
+  $categoryOptions,
   $events,
-  $filteredEvents, 
   $isLoading,
-  $searchText, 
-  $selectedCity, 
-  $selectedCategory,
-  $uniqueCities,
-  $uniqueCategories,
+  $regionOptions,
+  $searchText,
+  $selectedCategoryId,
+  $selectedDate,
+  $selectedRegionId,
+  categoryChanged,
+  dateChanged,
   eventsPageOpened,
+  regionChanged,
   searchChanged,
-  cityChanged,
-  categoryChanged
 } from '../../entities/events/model';
 import { routes } from '../../shared/routing';
 
@@ -89,30 +91,33 @@ const Events: React.FC = () => {
   const {
     events,
     isLoading,
-    filteredEvents,
     searchText,
-    selectedCity,
-    selectedCategory,
-    cities,
+    selectedRegionId,
+    selectedCategoryId,
+    selectedDate,
+    regions,
     categories,
     openPage,
     onSearch,
-    onCityChange,
-    onCategoryChange
+    onRegionChange,
+    onCategoryChange,
+    onDateChange,
   } = useUnit({
     events: $events,
     isLoading: $isLoading,
-    filteredEvents: $filteredEvents,
     searchText: $searchText,
-    selectedCity: $selectedCity,
-    selectedCategory: $selectedCategory,
-    cities: $uniqueCities,
-    categories: $uniqueCategories,
+    selectedRegionId: $selectedRegionId,
+    selectedCategoryId: $selectedCategoryId,
+    selectedDate: $selectedDate,
+    regions: $regionOptions,
+    categories: $categoryOptions,
     openPage: eventsPageOpened,
     onSearch: searchChanged,
-    onCityChange: cityChanged,
-    onCategoryChange: categoryChanged
+    onRegionChange: regionChanged,
+    onCategoryChange: categoryChanged,
+    onDateChange: dateChanged,
   });
+
   const [hasRequested, setHasRequested] = useState(() => events.length > 0);
 
   useEffect(() => {
@@ -125,36 +130,45 @@ const Events: React.FC = () => {
       <Space direction="vertical" size="large" style={{ width: '100%', marginBottom: '40px' }}>
         <Title level={2} style={{ color: 'var(--text-primary)', marginBottom: 0 }}>Всички събития</Title>
         <Paragraph style={{ color: 'var(--text-secondary)', marginBottom: 0 }}>Открий най-интересното, което предстои във вашия град.</Paragraph>
-        
-        {/* Филтри и Търсене */}
+
         <Row gutter={[16, 16]} align="middle">
-          <Col xs={24} md={10}>
-            <Search 
-              placeholder="Търси по име или описание..." 
-              allowClear 
-              enterButton={<SearchOutlined />} 
+          <Col xs={24} md={6}>
+            <Search
+              placeholder="Търси по име, артист или описание..."
+              allowClear
+              enterButton={<SearchOutlined />}
               size="large"
               value={searchText}
               onSearch={onSearch}
-              onChange={e => onSearch(e.target.value)}
+              onChange={(event) => onSearch(event.target.value)}
             />
           </Col>
-          <Col xs={12} md={7}>
+          <Col xs={24} md={6}>
             <FilterSelect
-              placeholder="Избери град"
-              value={selectedCity}
-              onChange={onCityChange}
-              onClear={() => onCityChange(null)}
-              options={cities.map(city => ({ label: city, value: city }))}
+              placeholder="Регион"
+              value={selectedRegionId}
+              onChange={onRegionChange}
+              onClear={() => onRegionChange(null)}
+              options={regions}
             />
           </Col>
-          <Col xs={12} md={7}>
+          <Col xs={24} md={6}>
             <FilterSelect
               placeholder="Категория"
-              value={selectedCategory}
+              value={selectedCategoryId}
               onChange={onCategoryChange}
               onClear={() => onCategoryChange(null)}
-              options={categories.map(cat => ({ label: cat, value: cat }))}
+              options={categories}
+            />
+          </Col>
+          <Col xs={24} md={6}>
+            <DatePicker
+              placeholder="Дата"
+              size="large"
+              style={{ width: '100%' }}
+              allowClear
+              value={selectedDate ? dayjs(selectedDate, 'YYYY-MM-DD') : null}
+              onChange={(value) => onDateChange(value ? value.format('YYYY-MM-DD') : null)}
             />
           </Col>
         </Row>
@@ -164,9 +178,9 @@ const Events: React.FC = () => {
         <div style={{ display: 'flex', justifyContent: 'center', padding: '96px 0' }}>
           <Spin size="large" tip="Зареждане на събития..." />
         </div>
-      ) : filteredEvents.length > 0 ? (
+      ) : events.length > 0 ? (
         <Row gutter={[24, 24]}>
-          {filteredEvents.map((event) => (
+          {events.map((event) => (
             <Col xs={24} sm={12} lg={8} key={event.id}>
               <Card
                 hoverable
@@ -179,29 +193,29 @@ const Events: React.FC = () => {
                 }
                 actions={[
                   <Link to={routes.eventDetails} params={{ id: event.id }} key="view-link">
-                    <Button 
-                      type="link" 
-                      icon={<ArrowRightOutlined />} 
+                    <Button
+                      type="link"
+                      icon={<ArrowRightOutlined />}
                     >
                       Виж повече
                     </Button>
                   </Link>,
                 ]}
                 style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--surface-bg)', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-soft)', overflow: 'hidden' }}
-                styles={{ body: { flex: 1, display: 'flex', flexDirection: 'column', background: 'var(--surface-bg)' }}}
+                styles={{ body: { flex: 1, display: 'flex', flexDirection: 'column', background: 'var(--surface-bg)' } }}
               >
                 <div style={{ marginBottom: '12px' }}>
                   <Tag color="blue">{event.category}</Tag>
                 </div>
                 <Title level={4} style={{ marginBottom: '8px', color: 'var(--text-primary)' }}>{event.title}</Title>
-                <Paragraph 
-                  ellipsis={{ rows: 2 }} 
+                <Paragraph
+                  ellipsis={{ rows: 2 }}
                   style={{ flex: 1, color: 'var(--text-secondary)' }}
                 >
                   {event.description}
                 </Paragraph>
                 <Space size="small" style={{ color: 'var(--text-secondary)' }}>
-                  <EnvironmentOutlined /> {event.city}
+                  <EnvironmentOutlined /> {event.region}
                   <CalendarOutlined style={{ marginLeft: '8px' }} /> {event.date}
                 </Space>
               </Card>
@@ -210,14 +224,18 @@ const Events: React.FC = () => {
         </Row>
       ) : (
         <div style={{ textAlign: 'center', padding: '100px 0' }}>
-            <Title level={4} style={{ color: 'var(--text-secondary)' }}>Няма намерени събития по тези критерии.</Title>
-            <Button type="primary" onClick={() => {
-                onSearch('');
-                onCityChange(null);
-                onCategoryChange(null);
-            }}>
-                Изчисти филтрите
-            </Button>
+          <Title level={4} style={{ color: 'var(--text-secondary)' }}>Няма намерени събития по тези критерии.</Title>
+          <Button
+            type="primary"
+            onClick={() => {
+              onSearch('');
+              onRegionChange(null);
+              onCategoryChange(null);
+              onDateChange(null);
+            }}
+          >
+            Изчисти филтрите
+          </Button>
         </div>
       )}
     </div>

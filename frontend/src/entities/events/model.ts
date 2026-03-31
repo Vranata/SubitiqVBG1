@@ -6,10 +6,28 @@ export type EventItem = {
   title: string;
   artist: string;
   description: string;
-  city: string;
+  regionId: number;
+  region: string;
+  startDate: string;
   date: string;
   image: string;
+  categoryId: number;
   category: string;
+  startHour: string;
+  endDate: string;
+  endHour: string;
+};
+
+export type FilterOption = {
+  label: string;
+  value: string;
+};
+
+type EventFilters = {
+  searchText: string;
+  regionId: string | null;
+  categoryId: string | null;
+  date: string | null;
 };
 
 type SupabaseEventRow = {
@@ -19,8 +37,23 @@ type SupabaseEventRow = {
   description: string;
   picture: string | null;
   start_date: string;
-  regions: Array<{ region: string }> | null;
-  event_category: Array<{ name_event_category: string }> | null;
+  start_hour: string;
+  end_date: string;
+  end_hour: string;
+  id_region: number;
+  id_event_category: number;
+  region: string;
+  category: string;
+};
+
+type RegionRow = {
+  id_region: number;
+  region: string;
+};
+
+type CategoryRow = {
+  id_event_category: number;
+  name_event_category: string;
 };
 
 const fallbackImage = 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=1200&q=80';
@@ -35,90 +68,142 @@ const formatDate = (value: string) => {
   return parsedDate.toLocaleDateString('bg-BG');
 };
 
-const getFirstRelation = <T,>(relation: T[] | T | null | undefined): T | null => {
-  if (!relation) {
-    return null;
-  }
-
-  return Array.isArray(relation) ? relation[0] ?? null : relation;
-};
-
 const mapEventRow = (row: SupabaseEventRow): EventItem => ({
   id: String(row.id_event),
   title: row.name_event,
   artist: row.name_artist,
   description: row.description,
-  city: getFirstRelation(row.regions)?.region ?? 'Непосочен регион',
+  regionId: row.id_region,
+  region: row.region,
+  startDate: row.start_date,
   date: formatDate(row.start_date),
   image: row.picture ?? fallbackImage,
-  category: getFirstRelation(row.event_category)?.name_event_category ?? 'Без категория',
+  categoryId: row.id_event_category,
+  category: row.category,
+  startHour: row.start_hour,
+  endDate: row.end_date,
+  endHour: row.end_hour,
 });
 
-const filterEvents = (events: EventItem[], search: string, city: string | null, category: string | null) => {
-  const normalizedSearch = search.trim().toLowerCase();
+const normalizeFilters = (filters: EventFilters) => ({
+  p_search_text: filters.searchText.trim().length > 0 ? filters.searchText.trim() : null,
+  p_region_id: filters.regionId ? Number(filters.regionId) : null,
+  p_category_id: filters.categoryId ? Number(filters.categoryId) : null,
+  p_event_date: filters.date,
+});
 
-  return events.filter((event) => {
-    const matchesSearch =
-      normalizedSearch.length === 0 ||
-      event.title.toLowerCase().includes(normalizedSearch) ||
-      event.artist.toLowerCase().includes(normalizedSearch) ||
-      event.description.toLowerCase().includes(normalizedSearch);
-    const matchesCity = !city || event.city === city;
-    const matchesCategory = !category || event.category === category;
-
-    return matchesSearch && matchesCity && matchesCategory;
-  });
-};
-
-export const fetchEventsFx = createEffect(async (): Promise<EventItem[]> => {
-  const { data, error } = await supabase
-    .from('events')
-    .select(`
-      id_event,
-      name_event,
-      name_artist,
-      description,
-      picture,
-      start_date,
-      regions ( region ),
-      event_category ( name_event_category )
-    `)
-    .order('start_date', { ascending: true });
+const loadEventRows = async (filters: EventFilters): Promise<EventItem[]> => {
+  const { data, error } = await supabase.rpc('search_events', normalizeFilters(filters));
 
   if (error) {
     throw error;
   }
 
-  return (data ?? []).map((row) => mapEventRow(row as SupabaseEventRow));
+  return (data ?? []).map((row: SupabaseEventRow) => mapEventRow(row));
+};
+
+const loadEventRowById = async (eventId: string): Promise<EventItem | null> => {
+  const numericId = Number(eventId);
+
+  if (Number.isNaN(numericId)) {
+    return null;
+  }
+
+  const { data, error } = await supabase.rpc('get_event_by_id', {
+    p_event_id: numericId,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  const [row] = (data ?? []) as SupabaseEventRow[];
+
+  return row ? mapEventRow(row) : null;
+};
+
+export const fetchEventsFx = createEffect(loadEventRows);
+export const fetchEventByIdFx = createEffect(loadEventRowById);
+export const fetchRegionsFx = createEffect(async (): Promise<FilterOption[]> => {
+  const { data, error } = await supabase
+    .from('regions')
+    .select('id_region, region')
+    .order('id_region', { ascending: true });
+
+  if (error) {
+    throw error;
+  }
+
+  return ((data ?? []) as RegionRow[]).map((row) => ({
+    label: row.region,
+    value: String(row.id_region),
+  }));
+});
+export const fetchCategoriesFx = createEffect(async (): Promise<FilterOption[]> => {
+  const { data, error } = await supabase
+    .from('event_category')
+    .select('id_event_category, name_event_category')
+    .order('id_event_category', { ascending: true });
+
+  if (error) {
+    throw error;
+  }
+
+  return ((data ?? []) as CategoryRow[]).map((row) => ({
+    label: row.name_event_category,
+    value: String(row.id_event_category),
+  }));
 });
 
 export const eventsPageOpened = createEvent<void>();
+export const eventDetailsOpened = createEvent<string>();
 export const searchChanged = createEvent<string>();
-export const cityChanged = createEvent<string | null>();
+export const regionChanged = createEvent<string | null>();
 export const categoryChanged = createEvent<string | null>();
+export const dateChanged = createEvent<string | null>();
 
 export const $events = createStore<EventItem[]>([]).on(fetchEventsFx.doneData, (_, nextEvents) => nextEvents);
-export const $isLoading = fetchEventsFx.pending;
+export const $currentEvent = createStore<EventItem | null>(null).on(fetchEventByIdFx.doneData, (_, nextEvent) => nextEvent);
+
+export const $isLoading = combine({
+  events: fetchEventsFx.pending,
+  regions: fetchRegionsFx.pending,
+  categories: fetchCategoriesFx.pending,
+}).map(({ events, regions, categories }) => events || regions || categories);
+
+export const $isDetailLoading = fetchEventByIdFx.pending;
+
 export const $searchText = createStore<string>('').on(searchChanged, (_, next) => next);
-export const $selectedCity = createStore<string | null>(null).on(cityChanged, (_, next) => next);
-export const $selectedCategory = createStore<string | null>(null).on(categoryChanged, (_, next) => next);
+export const $selectedRegionId = createStore<string | null>(null).on(regionChanged, (_, next) => next);
+export const $selectedCategoryId = createStore<string | null>(null).on(categoryChanged, (_, next) => next);
+export const $selectedDate = createStore<string | null>(null).on(dateChanged, (_, next) => next);
 
-export const $filteredEvents = combine({
-  events: $events,
-  search: $searchText,
-  city: $selectedCity,
-  category: $selectedCategory,
-}).map(({ events, search, city, category }) => filterEvents(events, search, city, category));
-
-export const $uniqueCities = $events.map((events) =>
-  Array.from(new Set(events.map((event) => event.city)))
-);
-
-export const $uniqueCategories = $events.map((events) =>
-  Array.from(new Set(events.map((event) => event.category)))
-);
+export const $regionOptions = createStore<FilterOption[]>([]).on(fetchRegionsFx.doneData, (_, nextOptions) => nextOptions);
+export const $categoryOptions = createStore<FilterOption[]>([]).on(fetchCategoriesFx.doneData, (_, nextOptions) => nextOptions);
 
 sample({
   clock: eventsPageOpened,
+  target: fetchRegionsFx,
+});
+
+sample({
+  clock: eventsPageOpened,
+  target: fetchCategoriesFx,
+});
+
+sample({
+  clock: [eventsPageOpened, searchChanged, regionChanged, categoryChanged, dateChanged],
+  source: {
+    searchText: $searchText,
+    regionId: $selectedRegionId,
+    categoryId: $selectedCategoryId,
+    date: $selectedDate,
+  },
+  fn: (filters): EventFilters => filters,
   target: fetchEventsFx,
+});
+
+sample({
+  clock: eventDetailsOpened,
+  target: fetchEventByIdFx,
 });

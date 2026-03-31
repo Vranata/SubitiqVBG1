@@ -5,10 +5,10 @@ import { BgColorsOutlined, CalendarOutlined, HomeOutlined, LoginOutlined, MoonOu
 import { history, routes } from './shared/routing';
 import './theme.css';
 
-import Home from './pages/Home';
-import Events from './pages/Events';
-import EventDetails from './pages/EventDetails';
-import Login from './pages/Login';
+import Home from './pages/Home/index';
+import Events from './pages/Events/index';
+import EventDetails from './pages/EventDetails/index';
+import Login from './pages/Login/index';
 
 const { Header, Content, Footer } = Layout;
 

@@ -17,6 +17,101 @@ as $$
   end;
 $$;
 
+create or replace function public.search_events(
+  p_search_text text default null,
+  p_region_id smallint default null,
+  p_category_id smallint default null,
+  p_event_date date default null
+)
+returns table (
+  id_event bigint,
+  name_event text,
+  name_artist text,
+  description text,
+  picture text,
+  start_date date,
+  start_hour time,
+  end_date date,
+  end_hour time,
+  id_region smallint,
+  id_event_category smallint,
+  region text,
+  category text
+)
+language sql
+stable
+as $$
+  select
+    e.id_event,
+    e.name_event,
+    e.name_artist,
+    e.description,
+    e.picture,
+    e.start_date,
+    e.start_hour,
+    e.end_date,
+    e.end_hour,
+    e.id_region,
+    e.id_event_category,
+    r.region,
+    ec.name_event_category as category
+  from public.events e
+  join public.regions r on r.id_region = e.id_region
+  join public.event_category ec on ec.id_event_category = e.id_event_category
+  where
+    (
+      p_search_text is null
+      or btrim(p_search_text) = ''
+      or e.name_event ilike '%' || p_search_text || '%'
+      or e.name_artist ilike '%' || p_search_text || '%'
+      or e.description ilike '%' || p_search_text || '%'
+    )
+    and (p_region_id is null or e.id_region = p_region_id)
+    and (p_category_id is null or e.id_event_category = p_category_id)
+    and (p_event_date is null or p_event_date between e.start_date and e.end_date)
+  order by e.start_date asc, e.start_hour asc, e.id_event asc;
+$$;
+
+create or replace function public.get_event_by_id(p_event_id bigint)
+returns table (
+  id_event bigint,
+  name_event text,
+  name_artist text,
+  description text,
+  picture text,
+  start_date date,
+  start_hour time,
+  end_date date,
+  end_hour time,
+  id_region smallint,
+  id_event_category smallint,
+  region text,
+  category text
+)
+language sql
+stable
+as $$
+  select
+    e.id_event,
+    e.name_event,
+    e.name_artist,
+    e.description,
+    e.picture,
+    e.start_date,
+    e.start_hour,
+    e.end_date,
+    e.end_hour,
+    e.id_region,
+    e.id_event_category,
+    r.region,
+    ec.name_event_category as category
+  from public.events e
+  join public.regions r on r.id_region = e.id_region
+  join public.event_category ec on ec.id_event_category = e.id_event_category
+  where e.id_event = p_event_id
+  limit 1;
+$$;
+
 -- ============================================================================
 -- Lookup tables
 -- ============================================================================
@@ -497,3 +592,6 @@ grant insert, update, delete on public.events to authenticated;
 grant select, insert, update, delete on public.user_likings to authenticated;
 
 grant usage, select on all sequences in schema public to authenticated;
+
+grant execute on function public.search_events(text, smallint, smallint, date) to anon, authenticated;
+grant execute on function public.get_event_by_id(bigint) to anon, authenticated;
