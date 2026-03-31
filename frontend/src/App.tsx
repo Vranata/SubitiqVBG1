@@ -1,10 +1,10 @@
 // App.tsx
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Route, Link } from 'atomic-router-react';
-import logo from './assets/logo.svg';
 import { ConfigProvider, Layout, Menu } from 'antd';
 import { HomeOutlined, CalendarOutlined, LoginOutlined } from '@ant-design/icons';
 import { routes } from './shared/routing';
+import { history } from './shared/routing';
 
 // Страници
 import Home from './pages/Home';
@@ -16,26 +16,40 @@ const { Header, Content, Footer } = Layout;
 
 // Menu configuration using Atomic Router routes
 const AppMenu: React.FC = () => {
+  const [selectedKey, setSelectedKey] = useState<string>(() => {
+    const p = typeof window !== 'undefined' ? window.location.pathname : '/';
+    return p === '/' ? 'home' : p.startsWith('/events') ? 'events' : p === '/login' ? 'login' : 'home';
+  });
+
+  useEffect(() => {
+    const unlisten = history.listen(({ location }) => {
+      const p = location.pathname;
+      setSelectedKey(p === '/' ? 'home' : p.startsWith('/events') ? 'events' : p === '/login' ? 'login' : 'home');
+    });
+    return () => unlisten();
+  }, []);
+
   return (
     <Menu
       theme="dark"
       mode="horizontal"
+      selectedKeys={[selectedKey]}
       style={{ flex: 1, minWidth: 0, borderBottom: 'none' }}
       items={[
-        { 
-          key: 'home', 
-          icon: <HomeOutlined />, 
-          label: <Link to={routes.home}>Начало</Link> 
+        {
+          key: 'home',
+          icon: <HomeOutlined />,
+          label: <Link to={routes.home}>Начало</Link>,
         },
-        { 
-          key: 'events', 
-          icon: <CalendarOutlined />, 
-          label: <Link to={routes.events}>Събития</Link> 
+        {
+          key: 'events',
+          icon: <CalendarOutlined />,
+          label: <Link to={routes.events}>Събития</Link>,
         },
-        { 
-          key: 'login', 
-          icon: <LoginOutlined />, 
-          label: <Link to={routes.login}>Вход</Link> 
+        {
+          key: 'login',
+          icon: <LoginOutlined />,
+          label: <Link to={routes.login}>Вход</Link>,
         },
       ]}
     />
@@ -58,13 +72,18 @@ const App: React.FC = () => {
           alignItems: 'center', 
           position: 'sticky', 
           top: 0, 
-          zIndex: 1, 
+          zIndex: 10000, 
           width: '100%',
           padding: '0 24px'
         }}>
-          <div className="demo-logo" style={{ display: 'flex', alignItems: 'center', marginRight: '24px' }}>
-            <img src={logo} alt="CULTURO BG" style={{ height: 36, marginRight: 12 }} />
-            <span style={{ color: 'white', fontWeight: 700, fontSize: '1rem', letterSpacing: '0.5px' }}>CULTURO BG</span>
+          <div className="demo-logo" style={{ 
+            color: 'white', 
+            marginRight: '48px', 
+            fontWeight: 800, 
+            fontSize: '1.25rem',
+            letterSpacing: '1px'
+          }}>
+            CULTURO BG
           </div>
           <AppMenu />
         </Header>
