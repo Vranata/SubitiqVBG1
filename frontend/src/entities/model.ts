@@ -1,10 +1,15 @@
 import type { Session, User } from '@supabase/supabase-js';
-import { createEffect, createEvent, createStore, sample } from 'effector';
-import { history } from '../shared/routing';
+import { redirect } from 'atomic-router';
+import { combine, createEffect, createEvent, createStore, sample } from 'effector';
+import { routes } from '../shared/routing';
 import { getSession, signIn, signOut, signUp, type AuthCredentials } from '../shared/api/auth';
 
-const redirectHomeFx = createEffect(() => {
-  history.replace('/');
+const goHome = createEvent<void>();
+
+redirect({
+  clock: goHome,
+  route: routes.home,
+  replace: true,
 });
 
 const sessionToUser = (session: Session | null): User | null => session?.user ?? null;
@@ -30,17 +35,22 @@ sample({
 });
 
 sample({
-  clock: signInFx.doneData,
-  target: redirectHomeFx,
+  clock: routes.login.opened,
+  source: $isAuthenticated,
+  filter: (isAuthenticated: boolean) => isAuthenticated,
+  fn: () => undefined,
+  target: goHome,
 });
 
 sample({
-  clock: signUpFx.doneData,
-  filter: (session): session is Session => Boolean(session),
-  target: redirectHomeFx,
+  clock: $isAuthenticated.updates,
+  filter: (isAuthenticated: boolean) => isAuthenticated,
+  fn: () => undefined,
+  target: goHome,
 });
 
 sample({
   clock: signOutFx.done,
-  target: redirectHomeFx,
+  fn: () => undefined,
+  target: goHome,
 });
