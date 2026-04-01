@@ -146,29 +146,49 @@ const App: React.FC = () => {
           <AppMenu themeMode={themeMode} />
 
           {isAuthenticated && user?.email && (
-            <Tooltip title={user.email}>
-              <span
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  maxWidth: 200,
-                  height: 34,
-                  marginLeft: 12,
-                  padding: '0 12px',
-                  borderRadius: 999,
-                  border: '1px solid var(--toggle-border)',
-                  background: 'var(--toggle-bg)',
-                  color: 'var(--header-text)',
-                  fontSize: '0.8rem',
-                  fontWeight: 600,
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                }}
-              >
-                {user.email}
-              </span>
-            </Tooltip>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 12 }}>
+              <Tooltip title={user.email}>
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    maxWidth: 200,
+                    height: 34,
+                    padding: '0 12px',
+                    borderRadius: 999,
+                    border: '1px solid var(--toggle-border)',
+                    background: 'var(--toggle-bg)',
+                    color: 'var(--header-text)',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {user.email}
+                </span>
+              </Tooltip>
+              <Tooltip title={user.roleNote}>
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    height: 34,
+                    padding: '0 12px',
+                    borderRadius: 999,
+                    border: '1px solid var(--toggle-border)',
+                    background: 'var(--toggle-bg)',
+                    color: 'var(--header-text)',
+                    fontSize: '0.72rem',
+                    fontWeight: 700,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {user.roleName}
+                </span>
+              </Tooltip>
+            </div>
           )}
 
           {isAuthenticated ? (

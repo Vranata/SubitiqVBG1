@@ -1,4 +1,4 @@
-import type { Session, User } from '@supabase/supabase-js';
+import type { Session } from '@supabase/supabase-js';
 import { redirect } from 'atomic-router';
 import { createEffect, createEvent, createStore, sample } from 'effector';
 import { routes } from '../shared/routing';
@@ -6,14 +6,112 @@ import { getSession, signIn, signOut, signUp, type AuthCredentials } from '../sh
 import { supabase } from '../services/supabaseClient';
 
 const goHome = createEvent<void>();
+const authSessionReceived = createEvent<Session | null>();
+
+export type UserRole = 'User' | 'Special_user' | 'Administrator';
+
+export type AppUser = {
+  id: string;
+  authUserId: string;
+  email: string;
+  name: string;
+  roleId: number;
+  roleName: UserRole;
+  roleNote: string;
+  picture: string | null;
+  regionId: number | null;
+  phone: string | null;
+  biography: string | null;
+};
+
+type UserRow = {
+  id_user: number;
+  auth_user_id: string;
+  email: string;
+  name_user: string;
+  id_category: number;
+  picture: string | null;
+  id_region: number | null;
+  phone_user: string | null;
+  biogr_user: string | null;
+  user_category: Array<{
+    id_category: number;
+    name_category: UserRole;
+    note_category_user: string;
+  }> | null;
+};
+
+const roleFallbacks: Record<UserRole, { note: string }> = {
+  User: {
+    note: 'Обикновен потребител, който разглежда събития и управлява профил.',
+  },
+  Special_user: {
+    note: 'Потребител, който може да създава и управлява свои събития.',
+  },
+  Administrator: {
+    note: 'Пълен административен достъп до съдържание и настройки.',
+  },
+};
+
+const buildFallbackUser = (session: Session): AppUser => ({
+  id: session.user.id,
+  authUserId: session.user.id,
+  email: session.user.email ?? '',
+  name: session.user.user_metadata?.full_name ?? session.user.user_metadata?.name ?? session.user.email ?? 'Потребител',
+  roleId: 1,
+  roleName: 'User',
+  roleNote: roleFallbacks.User.note,
+  picture: null,
+  regionId: null,
+  phone: null,
+  biography: null,
+});
+
+const mapUserRow = (row: UserRow): AppUser => {
+  const userCategory = row.user_category?.[0] ?? null;
+
+  return {
+    id: String(row.id_user),
+    authUserId: row.auth_user_id,
+    email: row.email,
+    name: row.name_user,
+    roleId: userCategory?.id_category ?? row.id_category,
+    roleName: userCategory?.name_category ?? 'User',
+    roleNote: userCategory?.note_category_user ?? roleFallbacks.User.note,
+    picture: row.picture,
+    regionId: row.id_region,
+    phone: row.phone_user,
+    biography: row.biogr_user,
+  };
+};
+
+const loadUserProfileFx = createEffect(async (session: Session | null): Promise<AppUser | null> => {
+  if (!session) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from('users')
+    .select('id_user, auth_user_id, email, name_user, id_category, picture, id_region, phone_user, biogr_user, user_category:id_category ( id_category, name_category, note_category_user )')
+    .eq('auth_user_id', session.user.id)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data) {
+    return buildFallbackUser(session);
+  }
+
+  return mapUserRow(data as UserRow);
+});
 
 redirect({
   clock: goHome,
   route: routes.home,
   replace: true,
 });
-
-const sessionToUser = (session: Session | null): User | null => session?.user ?? null;
 
 export const checkSession = createEvent<void>();
 export const authStateChanged = createEvent<Session | null>();
@@ -28,14 +126,13 @@ export const startAuthSyncFx = createEffect(() => {
 
 const checkSessionFx = createEffect(async () => getSession());
 
-export const $user = createStore<User | null>(null)
-  .on(checkSessionFx.doneData, (_, session) => sessionToUser(session))
-  .on(signInFx.doneData, (_, session) => sessionToUser(session))
-  .on(signUpFx.doneData, (_, session) => sessionToUser(session))
-  .on(authStateChanged, (_, session) => sessionToUser(session))
-  .on(signOutFx.done, () => null);
+export const $user = createStore<AppUser | null>(null).on(loadUserProfileFx.doneData, (_, user) => user);
 
 export const $isAuthenticated = $user.map((user) => Boolean(user));
+export const $userRole = $user.map((user) => user?.roleName ?? null);
+export const $isAdmin = $userRole.map((role) => role === 'Administrator');
+export const $isSpecialUser = $userRole.map((role) => role === 'Special_user');
+export const $isRegularUser = $userRole.map((role) => role === 'User');
 
 sample({
   clock: checkSession,
@@ -43,36 +140,38 @@ sample({
 });
 
 sample({
-  clock: routes.login.opened,
-  source: $isAuthenticated,
-  filter: (isAuthenticated: boolean) => isAuthenticated,
-  fn: () => undefined,
-  target: goHome,
+  clock: [checkSessionFx.doneData, signInFx.doneData, signUpFx.doneData, authStateChanged],
+  target: authSessionReceived,
 });
 
 sample({
-  clock: checkSessionFx.doneData,
-  filter: (session: Session | null): session is Session => Boolean(session),
-  fn: () => undefined,
-  target: goHome,
+  clock: signOutFx.done,
+  fn: () => null,
+  target: authSessionReceived,
 });
 
 sample({
-  clock: signInFx.doneData,
-  filter: (session: Session | null): session is Session => Boolean(session),
-  fn: () => undefined,
-  target: goHome,
+  clock: authSessionReceived,
+  target: loadUserProfileFx,
 });
 
 sample({
-  clock: signUpFx.doneData,
-  filter: (session: Session | null): session is Session => Boolean(session),
+  clock: loadUserProfileFx.doneData,
+  filter: (user: AppUser | null): user is AppUser => Boolean(user),
   fn: () => undefined,
   target: goHome,
 });
 
 sample({
   clock: signOutFx.done,
+  fn: () => undefined,
+  target: goHome,
+});
+
+sample({
+  clock: routes.login.opened,
+  source: $isAuthenticated,
+  filter: (isAuthenticated: boolean) => isAuthenticated,
   fn: () => undefined,
   target: goHome,
 });
