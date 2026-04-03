@@ -103,6 +103,10 @@ const EventDetails: React.FC = () => {
                 <Text strong style={{ fontSize: '1.1rem', color: 'var(--text-primary)' }}>{currentEvent.region}</Text>
               </div>
               <div>
+                <Text style={{ display: 'block', color: 'var(--text-secondary)' }}>Място:</Text>
+                <Text strong style={{ fontSize: '1.1rem', color: 'var(--text-primary)' }}>{currentEvent.place}</Text>
+              </div>
+              <div>
                 <Text style={{ display: 'block', color: 'var(--text-secondary)' }}>Час:</Text>
                 <Text strong style={{ fontSize: '1.1rem', color: 'var(--text-primary)' }}>{currentEvent.startHour}</Text>
               </div>

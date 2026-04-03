@@ -4,7 +4,7 @@ import { supabase } from '../../services/supabaseClient';
 export type EventItem = {
   id: string;
   title: string;
-  artist: string;
+  place: string;
   description: string;
   regionId: number;
   region: string;
@@ -16,6 +16,24 @@ export type EventItem = {
   startHour: string;
   endDate: string;
   endHour: string;
+  ownerId: string;
+};
+
+export type EventEditorValues = {
+  name: string;
+  place: string;
+  description: string;
+  regionId: string;
+  categoryId: string;
+  startDate: string;
+  endDate: string;
+  startHour: string;
+  endHour: string;
+};
+
+export type EventMutationValues = EventEditorValues & {
+  id?: string;
+  userId: string;
 };
 
 export type FilterOption = {
@@ -34,6 +52,7 @@ type SupabaseEventRow = {
   id_event: number;
   name_event: string;
   name_artist: string;
+  place_event: string;
   description: string;
   picture: string | null;
   start_date: string;
@@ -42,6 +61,7 @@ type SupabaseEventRow = {
   end_hour: string;
   id_region: number;
   id_event_category: number;
+  id_user: number;
   region: string;
   category: string;
 };
@@ -58,6 +78,22 @@ type CategoryRow = {
 
 const fallbackImage = 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=1200&q=80';
 
+const sortEvents = (events: EventItem[]) => [...events].sort((leftEvent, rightEvent) => {
+  const dateCompare = leftEvent.startDate.localeCompare(rightEvent.startDate);
+
+  if (dateCompare !== 0) {
+    return dateCompare;
+  }
+
+  const hourCompare = leftEvent.startHour.localeCompare(rightEvent.startHour);
+
+  if (hourCompare !== 0) {
+    return hourCompare;
+  }
+
+  return Number(leftEvent.id) - Number(rightEvent.id);
+});
+
 const formatDate = (value: string) => {
   const parsedDate = new Date(value);
 
@@ -71,7 +107,7 @@ const formatDate = (value: string) => {
 const mapEventRow = (row: SupabaseEventRow): EventItem => ({
   id: String(row.id_event),
   title: row.name_event,
-  artist: row.name_artist,
+  place: row.place_event,
   description: row.description,
   regionId: row.id_region,
   region: row.region,
@@ -83,6 +119,22 @@ const mapEventRow = (row: SupabaseEventRow): EventItem => ({
   startHour: row.start_hour,
   endDate: row.end_date,
   endHour: row.end_hour,
+  ownerId: String(row.id_user),
+});
+
+const buildEventPayload = (values: EventMutationValues) => ({
+  name_event: values.name.trim(),
+  name_artist: values.place.trim() || values.name.trim(),
+  place_event: values.place.trim(),
+  description: values.description.trim(),
+  id_region: Number(values.regionId),
+  id_event_category: Number(values.categoryId),
+  id_user: Number(values.userId),
+  start_date: values.startDate,
+  start_hour: values.startHour,
+  end_date: values.endDate,
+  end_hour: values.endHour,
+  picture: null,
 });
 
 const normalizeFilters = (filters: EventFilters) => ({
@@ -124,6 +176,71 @@ const loadEventRowById = async (eventId: string): Promise<EventItem | null> => {
 
 export const fetchEventsFx = createEffect(loadEventRows);
 export const fetchEventByIdFx = createEffect(loadEventRowById);
+export const addEventFx = createEffect(async (values: EventMutationValues): Promise<EventItem> => {
+  const { data, error } = await supabase
+    .from('events')
+    .insert(buildEventPayload(values))
+    .select('id_event')
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  const createdEvent = await loadEventRowById(String(data.id_event));
+
+  if (!createdEvent) {
+    throw new Error('Failed to load the created event.');
+  }
+
+  return createdEvent;
+});
+export const updateEventFx = createEffect(async (values: EventMutationValues): Promise<EventItem> => {
+  if (!values.id) {
+    throw new Error('Missing event id.');
+  }
+
+  const numericId = Number(values.id);
+
+  if (Number.isNaN(numericId)) {
+    throw new Error('Invalid event id.');
+  }
+
+  const { error } = await supabase
+    .from('events')
+    .update(buildEventPayload(values))
+    .eq('id_event', numericId);
+
+  if (error) {
+    throw error;
+  }
+
+  const updatedEvent = await loadEventRowById(values.id);
+
+  if (!updatedEvent) {
+    throw new Error('Failed to load the updated event.');
+  }
+
+  return updatedEvent;
+});
+export const deleteEventFx = createEffect(async (eventId: string): Promise<string> => {
+  const numericId = Number(eventId);
+
+  if (Number.isNaN(numericId)) {
+    throw new Error('Invalid event id.');
+  }
+
+  const { error } = await supabase
+    .from('events')
+    .delete()
+    .eq('id_event', numericId);
+
+  if (error) {
+    throw error;
+  }
+
+  return eventId;
+});
 export const fetchRegionsFx = createEffect(async (): Promise<FilterOption[]> => {
   const { data, error } = await supabase
     .from('regions')
@@ -162,8 +279,15 @@ export const regionChanged = createEvent<string | null>();
 export const categoryChanged = createEvent<string | null>();
 export const dateChanged = createEvent<string | null>();
 
-export const $events = createStore<EventItem[]>([]).on(fetchEventsFx.doneData, (_, nextEvents) => nextEvents);
-export const $currentEvent = createStore<EventItem | null>(null).on(fetchEventByIdFx.doneData, (_, nextEvent) => nextEvent);
+export const $events = createStore<EventItem[]>([])
+  .on(fetchEventsFx.doneData, (_, nextEvents) => sortEvents(nextEvents))
+  .on(addEventFx.doneData, (events, nextEvent) => sortEvents([...events, nextEvent]))
+  .on(updateEventFx.doneData, (events, nextEvent) => sortEvents(events.map((event) => (event.id === nextEvent.id ? nextEvent : event))))
+  .on(deleteEventFx.doneData, (events, deletedEventId) => events.filter((event) => event.id !== deletedEventId));
+export const $currentEvent = createStore<EventItem | null>(null)
+  .on(fetchEventByIdFx.doneData, (_, nextEvent) => nextEvent)
+  .on(updateEventFx.doneData, (currentEvent, nextEvent) => (currentEvent?.id === nextEvent.id ? nextEvent : currentEvent))
+  .on(deleteEventFx.doneData, (currentEvent, deletedEventId) => (currentEvent?.id === deletedEventId ? null : currentEvent));
 
 export const $isLoading = combine({
   events: fetchEventsFx.pending,

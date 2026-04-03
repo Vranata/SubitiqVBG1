@@ -84,7 +84,7 @@ const AppMenu: React.FC<{ themeMode: ThemeMode }> = ({ themeMode }) => {
   ];
 
   return (
-    <Menu
+    <Menu  
       theme={themeMode === 'orange' ? 'light' : 'dark'}
       mode="horizontal"
       selectedKeys={[selectedKey]}
