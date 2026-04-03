@@ -55,14 +55,16 @@ const roleFallbacks: Record<UserRole, { note: string }> = {
 
 const adminBootstrapEmail = 'culturobg@gmail.com';
 
+const isBootstrapAdminEmail = (email: string | null | undefined) => email?.toLowerCase() === adminBootstrapEmail;
+
 const buildFallbackUser = (session: Session): AppUser => ({
   id: session.user.id,
   authUserId: session.user.id,
   email: session.user.email ?? '',
   name: session.user.user_metadata?.full_name ?? session.user.user_metadata?.name ?? session.user.email ?? 'Потребител',
-  roleId: session.user.email?.toLowerCase() === adminBootstrapEmail ? 3 : 1,
-  roleName: session.user.email?.toLowerCase() === adminBootstrapEmail ? 'Administrator' : 'User',
-  roleNote: session.user.email?.toLowerCase() === adminBootstrapEmail ? roleFallbacks.Administrator.note : roleFallbacks.User.note,
+  roleId: isBootstrapAdminEmail(session.user.email) ? 3 : 1,
+  roleName: isBootstrapAdminEmail(session.user.email) ? 'Administrator' : 'User',
+  roleNote: isBootstrapAdminEmail(session.user.email) ? roleFallbacks.Administrator.note : roleFallbacks.User.note,
   picture: null,
   regionId: null,
   phone: null,
@@ -71,15 +73,16 @@ const buildFallbackUser = (session: Session): AppUser => ({
 
 const mapUserRow = (row: UserRow): AppUser => {
   const userCategory = row.user_category?.[0] ?? null;
+  const bootstrapAdmin = isBootstrapAdminEmail(row.email);
 
   return {
     id: String(row.id_user),
     authUserId: row.auth_user_id,
     email: row.email,
     name: row.name_user,
-    roleId: userCategory?.id_category ?? row.id_category,
-    roleName: userCategory?.name_category ?? 'User',
-    roleNote: userCategory?.note_category_user ?? roleFallbacks.User.note,
+    roleId: bootstrapAdmin ? 3 : (userCategory?.id_category ?? row.id_category),
+    roleName: bootstrapAdmin ? 'Administrator' : (userCategory?.name_category ?? 'User'),
+    roleNote: bootstrapAdmin ? roleFallbacks.Administrator.note : (userCategory?.note_category_user ?? roleFallbacks.User.note),
     picture: row.picture,
     regionId: row.id_region,
     phone: row.phone_user,

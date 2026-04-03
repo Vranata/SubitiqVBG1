@@ -14,6 +14,8 @@ set place_event = case id_event
 end
 where coalesce(place_event, '') = '';
 
+drop function if exists public.search_events(text, smallint, smallint, date);
+
 create or replace function public.search_events(
   p_search_text text default null,
   p_region_id smallint default null,
@@ -73,6 +75,8 @@ as $$
     and (p_event_date is null or p_event_date between e.start_date and e.end_date)
   order by e.start_date asc, e.start_hour asc, e.id_event asc;
 $$;
+
+drop function if exists public.get_event_by_id(bigint);
 
 create or replace function public.get_event_by_id(p_event_id bigint)
 returns table (

@@ -47,6 +47,8 @@ $$;
 
 create or replace function public.search_events(
   p_search_text text default null,
+
+select setval(pg_get_serial_sequence('public.users', 'id_user'), coalesce((select max(id_user) from public.users), 0) + 1, false);
   p_region_id smallint default null,
   p_category_id smallint default null,
   p_event_date date default null
@@ -104,6 +106,8 @@ as $$
     and (p_event_date is null or p_event_date between e.start_date and e.end_date)
   order by e.start_date asc, e.start_hour asc, e.id_event asc;
 $$;
+
+drop function if exists public.get_event_by_id(bigint);
 
 create or replace function public.get_event_by_id(p_event_id bigint)
 returns table (
@@ -357,8 +361,39 @@ insert into public.users (
   )
 on conflict (id_user) do nothing;
 
+insert into public.users (
+  auth_user_id,
+  email,
+  name_user,
+  id_category,
+  password_hash,
+  count_events,
+  picture,
+  id_region,
+  phone_user,
+  biogr_user
+) values (
+  '08dd95b4-2c25-47ef-a872-d50347a4f099',
+  'culturobg@gmail.com',
+  'CULTURO BG',
+  3,
+  'supabase_auth_managed_placeholder',
+  0,
+  null,
+  23,
+  null,
+  null
+)
+on conflict (auth_user_id) do update set
+  email = excluded.email,
+  name_user = excluded.name_user,
+  id_category = excluded.id_category,
+  id_region = excluded.id_region;
+
 -- Autocreate public profiles when new Supabase Auth users are created.
 
+
+select setval(pg_get_serial_sequence('public.events', 'id_event'), coalesce((select max(id_event) from public.events), 0) + 1, false);
 create or replace function public.handle_new_auth_user()
 returns trigger
 language plpgsql
@@ -629,6 +664,8 @@ with check (
       and u.id_category in (2, 3)
   )
 );
+drop function if exists public.get_event_by_id(bigint);
+
 
 drop policy if exists "Event owners can update if allowed" on public.events;
 create policy "Event owners can update if allowed"

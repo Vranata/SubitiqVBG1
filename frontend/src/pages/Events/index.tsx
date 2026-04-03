@@ -30,6 +30,7 @@ import {
   $isSpecialUser,
   $user,
 } from '../../entities/model';
+import { supabase } from '../../services/supabaseClient';
 import { routes } from '../../shared/routing';
 
 const { Title, Paragraph } = Typography;
@@ -154,6 +155,30 @@ const Events: React.FC = () => {
   const currentUserId = user?.id ?? null;
   const canCreateEvent = isAdmin || isSpecialUser;
 
+  const resolveCurrentUserDbId = async (): Promise<number> => {
+    const authUserId = user?.authUserId;
+
+    if (!authUserId) {
+      throw new Error('Профилът на потребителя не е зареден. Презареди страницата.');
+    }
+
+    const { data, error } = await supabase
+      .from('users')
+      .select('id_user')
+      .eq('auth_user_id', authUserId)
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data) {
+      throw new Error('Потребителският профил не е синхронизиран. Презареди страницата.');
+    }
+
+    return data.id_user;
+  };
+
   useEffect(() => {
     setHasRequested(true);
     openPage();
@@ -178,7 +203,7 @@ const Events: React.FC = () => {
   };
 
   const submitEvent = async (values: EventEditorValues) => {
-    if (!currentUserId) {
+    if (!user) {
       const errorText = 'Трябва да си вписан, за да управляваш събития.';
       setEditorError(errorText);
       messageApi.error(errorText);
@@ -186,9 +211,11 @@ const Events: React.FC = () => {
     }
 
     try {
+      const currentUserDbId = await resolveCurrentUserDbId();
+
       const payload = {
         ...values,
-        userId: currentUserId,
+        userId: String(currentUserDbId),
         ...(editingEvent ? { id: editingEvent.id } : {}),
       };
 
@@ -210,7 +237,7 @@ const Events: React.FC = () => {
   };
 
   const deleteEvent = async (event: EventItem) => {
-    if (!currentUserId) {
+    if (!user) {
       const errorText = 'Трябва да си вписан, за да управляваш събития.';
       setEditorError(errorText);
       messageApi.error(errorText);
@@ -218,6 +245,7 @@ const Events: React.FC = () => {
     }
 
     try {
+      await resolveCurrentUserDbId();
       await removeEvent(event.id);
 
       if (editingEvent?.id === event.id) {
