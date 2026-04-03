@@ -103,6 +103,7 @@ const Events: React.FC = () => {
   const [hasRequested, setHasRequested] = useState(false);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<EventItem | null>(null);
+  const [editorError, setEditorError] = useState<string | null>(null);
 
   const {
     events,
@@ -161,21 +162,26 @@ const Events: React.FC = () => {
   const closeEditor = () => {
     setIsEditorOpen(false);
     setEditingEvent(null);
+    setEditorError(null);
   };
 
   const openCreateEditor = () => {
     setEditingEvent(null);
+    setEditorError(null);
     setIsEditorOpen(true);
   };
 
   const openEditEditor = (event: EventItem) => {
     setEditingEvent(event);
+    setEditorError(null);
     setIsEditorOpen(true);
   };
 
   const submitEvent = async (values: EventEditorValues) => {
     if (!currentUserId) {
-      messageApi.error('Трябва да си вписан, за да управляваш събития.');
+      const errorText = 'Трябва да си вписан, за да управляваш събития.';
+      setEditorError(errorText);
+      messageApi.error(errorText);
       return;
     }
 
@@ -194,15 +200,20 @@ const Events: React.FC = () => {
         messageApi.success('Събитието беше добавено.');
       }
 
+      setEditorError(null);
       closeEditor();
     } catch (error) {
-      messageApi.error(error instanceof Error ? error.message : 'Възникна грешка при записването на събитието.');
+      const errorText = error instanceof Error ? error.message : 'Възникна грешка при записването на събитието.';
+      setEditorError(errorText);
+      messageApi.error(errorText);
     }
   };
 
   const deleteEvent = async (event: EventItem) => {
     if (!currentUserId) {
-      messageApi.error('Трябва да си вписан, за да управляваш събития.');
+      const errorText = 'Трябва да си вписан, за да управляваш събития.';
+      setEditorError(errorText);
+      messageApi.error(errorText);
       return;
     }
 
@@ -215,7 +226,9 @@ const Events: React.FC = () => {
 
       messageApi.success('Събитието беше изтрито.');
     } catch (error) {
-      messageApi.error(error instanceof Error ? error.message : 'Възникна грешка при изтриването.');
+      const errorText = error instanceof Error ? error.message : 'Възникна грешка при изтриването.';
+      setEditorError(errorText);
+      messageApi.error(errorText);
     }
   };
 
@@ -240,7 +253,7 @@ const Events: React.FC = () => {
         <Row gutter={[16, 16]} align="middle">
           <Col xs={24} md={6}>
             <Search
-              placeholder="Търси по име, място или описание..."
+              placeholder="Търси по име, изпълнител, място или описание..."
               allowClear
               enterButton={<SearchOutlined />}
               size="large"
@@ -374,6 +387,7 @@ const Events: React.FC = () => {
         event={editingEvent}
         regions={regions}
         categories={categories}
+        errorMessage={editorError}
         onCancel={closeEditor}
         onSubmit={submitEvent}
       />

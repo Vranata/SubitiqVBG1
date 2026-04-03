@@ -4,6 +4,7 @@ import { supabase } from '../../services/supabaseClient';
 export type EventItem = {
   id: string;
   title: string;
+  artist: string;
   place: string;
   description: string;
   regionId: number;
@@ -21,6 +22,7 @@ export type EventItem = {
 
 export type EventEditorValues = {
   name: string;
+  artist: string;
   place: string;
   description: string;
   regionId: string;
@@ -107,6 +109,7 @@ const formatDate = (value: string) => {
 const mapEventRow = (row: SupabaseEventRow): EventItem => ({
   id: String(row.id_event),
   title: row.name_event,
+  artist: row.name_artist,
   place: row.place_event,
   description: row.description,
   regionId: row.id_region,
@@ -124,7 +127,7 @@ const mapEventRow = (row: SupabaseEventRow): EventItem => ({
 
 const buildEventPayload = (values: EventMutationValues) => ({
   name_event: values.name.trim(),
-  name_artist: values.place.trim() || values.name.trim(),
+  name_artist: values.artist.trim(),
   place_event: values.place.trim(),
   description: values.description.trim(),
   id_region: Number(values.regionId),

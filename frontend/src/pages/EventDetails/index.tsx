@@ -92,8 +92,20 @@ const EventDetails: React.FC = () => {
 
         <Col xs={24} lg={8}>
           <Card bordered={false} style={{ background: 'var(--surface-bg)', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-soft)', position: 'sticky', top: '100px' }}>
-            <Title level={4} style={{ color: 'var(--text-primary)' }}>Информация за локация</Title>
+            <Title level={4} style={{ color: 'var(--text-primary)' }}>Детайли от базата</Title>
             <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+              <div>
+                <Text style={{ display: 'block', color: 'var(--text-secondary)' }}>ID:</Text>
+                <Text strong style={{ fontSize: '1.1rem', color: 'var(--text-primary)' }}>{currentEvent.id}</Text>
+              </div>
+              <div>
+                <Text style={{ display: 'block', color: 'var(--text-secondary)' }}>Изпълнител / организатор:</Text>
+                <Text strong style={{ fontSize: '1.1rem', color: 'var(--text-primary)' }}>{currentEvent.artist}</Text>
+              </div>
+              <div>
+                <Text style={{ display: 'block', color: 'var(--text-secondary)' }}>Място:</Text>
+                <Text strong style={{ fontSize: '1.1rem', color: 'var(--text-primary)' }}>{currentEvent.place}</Text>
+              </div>
               <div>
                 <Text style={{ display: 'block', color: 'var(--text-secondary)' }}>Дата:</Text>
                 <Text strong style={{ fontSize: '1.1rem', color: 'var(--text-primary)' }}>{currentEvent.date}</Text>
@@ -103,12 +115,20 @@ const EventDetails: React.FC = () => {
                 <Text strong style={{ fontSize: '1.1rem', color: 'var(--text-primary)' }}>{currentEvent.region}</Text>
               </div>
               <div>
-                <Text style={{ display: 'block', color: 'var(--text-secondary)' }}>Място:</Text>
-                <Text strong style={{ fontSize: '1.1rem', color: 'var(--text-primary)' }}>{currentEvent.place}</Text>
+                <Text style={{ display: 'block', color: 'var(--text-secondary)' }}>Категория:</Text>
+                <Text strong style={{ fontSize: '1.1rem', color: 'var(--text-primary)' }}>{currentEvent.category}</Text>
               </div>
               <div>
-                <Text style={{ display: 'block', color: 'var(--text-secondary)' }}>Час:</Text>
-                <Text strong style={{ fontSize: '1.1rem', color: 'var(--text-primary)' }}>{currentEvent.startHour}</Text>
+                <Text style={{ display: 'block', color: 'var(--text-secondary)' }}>Начало:</Text>
+                <Text strong style={{ fontSize: '1.1rem', color: 'var(--text-primary)' }}>{currentEvent.startDate} {currentEvent.startHour}</Text>
+              </div>
+              <div>
+                <Text style={{ display: 'block', color: 'var(--text-secondary)' }}>Край:</Text>
+                <Text strong style={{ fontSize: '1.1rem', color: 'var(--text-primary)' }}>{currentEvent.endDate} {currentEvent.endHour}</Text>
+              </div>
+              <div>
+                <Text style={{ display: 'block', color: 'var(--text-secondary)' }}>Снимка:</Text>
+                <Text strong style={{ fontSize: '1.1rem', color: 'var(--text-primary)', wordBreak: 'break-word' }}>{currentEvent.image}</Text>
               </div>
               <Divider />
               <Button type="primary" block size="large">

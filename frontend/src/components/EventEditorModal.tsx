@@ -1,13 +1,14 @@
 import React, { useEffect } from 'react';
 import dayjs, { type Dayjs } from 'dayjs';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
-import { Button, Col, DatePicker, Form, Input, Modal, Row, Select, TimePicker } from 'antd';
+import { Alert, Button, Col, DatePicker, Form, Input, Modal, Row, Select, TimePicker } from 'antd';
 import type { FilterOption, EventEditorValues, EventItem } from '../entities/events/model';
 
 dayjs.extend(customParseFormat);
 
 type EventEditorFormValues = {
   name: string;
+  artist: string;
   place: string;
   description: string;
   regionId: string;
@@ -26,12 +27,14 @@ type EventEditorModalProps = {
   event: EventItem | null;
   regions: FilterOption[];
   categories: FilterOption[];
+  errorMessage?: string | null;
   onCancel: () => void;
   onSubmit: (values: EventEditorValues) => Promise<void> | void;
 };
 
 const buildInitialValues = (event: EventItem | null): Partial<EventEditorFormValues> => ({
   name: event?.title ?? '',
+  artist: event?.artist ?? '',
   place: event?.place ?? '',
   description: event?.description ?? '',
   regionId: event ? String(event.regionId) : undefined,
@@ -50,6 +53,7 @@ const EventEditorModal: React.FC<EventEditorModalProps> = ({
   event,
   regions,
   categories,
+  errorMessage,
   onCancel,
   onSubmit,
 }) => {
@@ -74,6 +78,7 @@ const EventEditorModal: React.FC<EventEditorModalProps> = ({
 
     await onSubmit({
       name: values.name.trim(),
+      artist: values.artist.trim(),
       place: values.place.trim(),
       description: values.description.trim(),
       regionId: values.regionId,
@@ -97,6 +102,15 @@ const EventEditorModal: React.FC<EventEditorModalProps> = ({
       destroyOnClose
       width={760}
     >
+      {errorMessage ? (
+        <Alert
+          type="error"
+          showIcon
+          message={errorMessage}
+          style={{ marginBottom: '16px' }}
+        />
+      ) : null}
+
       <Form<EventEditorFormValues>
         form={form}
         layout="vertical"
@@ -123,6 +137,17 @@ const EventEditorModal: React.FC<EventEditorModalProps> = ({
           ]}
         >
           <Input placeholder="Например: Летен театър" />
+        </Form.Item>
+
+        <Form.Item
+          label="Изпълнител / организатор"
+          name="artist"
+          rules={[
+            { required: true, message: 'Въведи изпълнител или организатор.' },
+            { max: 120, message: 'Полето трябва да е до 120 символа.' },
+          ]}
+        >
+          <Input placeholder="Например: The Horizon Band" />
         </Form.Item>
 
         <Row gutter={16}>
