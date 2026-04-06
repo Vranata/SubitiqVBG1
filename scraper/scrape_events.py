@@ -1,9 +1,8 @@
-"""Basic event scraper for Culturo BG.
+"""Programata.bg event scraper for Culturo BG.
 
-This script fetches an events page, parses event cards with BeautifulSoup,
-and stores the results in Supabase with a best-effort deduplication step.
-
-Adapt the CSS selectors at the top of the file to match the target source.
+This script parses `.post-list-entry` cards from Programata.bg, follows the
+linked detail page, extracts event dictionaries with BeautifulSoup, and stores
+the results in Supabase with a best-effort deduplication step.
 """
 
 from __future__ import annotations
@@ -11,9 +10,11 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
+from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup, Tag
@@ -25,18 +26,80 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 logger = logging.getLogger(__name__)
 
 
-EVENT_CARD_SELECTOR = "[data-event-card], .event-card, article.event"
-TITLE_SELECTORS = ["[data-event-name]", ".event-title", "h2", "h3"]
-ARTIST_SELECTORS = ["[data-event-artist]", ".event-artist", ".artist"]
-PLACE_SELECTORS = ["[data-event-place]", ".event-place", ".place"]
-CATEGORY_SELECTORS = ["[data-event-category-id]", "[data-event-category]", ".event-category"]
-REGION_SELECTORS = ["[data-region-id]", "[data-region]", ".event-region"]
-START_DATE_SELECTORS = ["[data-start-date]", "[data-date-start]", ".start-date", "time[datetime]"]
-START_TIME_SELECTORS = ["[data-start-hour]", "[data-start-time]", ".start-time", "time"]
-END_DATE_SELECTORS = ["[data-end-date]", "[data-date-end]", ".end-date"]
-END_TIME_SELECTORS = ["[data-end-hour]", "[data-end-time]", ".end-time"]
-DESCRIPTION_SELECTORS = ["[data-event-description]", ".event-description", "p"]
+EVENT_CARD_SELECTOR = ".post-list-entry"
+CARD_TITLE_SELECTOR = "h3 a, h3"
+CARD_AUTHOR_SELECTOR = "span"
+CARD_LINK_SELECTOR = "h3 a[href], .figure a[href]"
+CARD_IMAGE_SELECTOR = ".figure img, img"
 OWNER_SELECTORS = ["[data-user-id]", "[data-owner-id]", "[data-auth-user-id]"]
+
+DETAIL_CONTAINER_SELECTORS = ["article", ".entry-content", ".post-content"]
+DETAIL_TITLE_SELECTORS = ["article h1", "h1", ".entry-title"]
+DETAIL_BREADCRUMB_SELECTORS = [".breadcrumbs a", "nav.breadcrumbs a", ".breadcrumb a"]
+DETAIL_META_DESCRIPTION_SELECTORS = ['meta[property="og:description"]', 'meta[name="description"]']
+DETAIL_META_IMAGE_SELECTORS = ['meta[property="og:image"]', 'meta[name="twitter:image"]']
+DETAIL_META_AUTHOR_SELECTORS = ['meta[name="author"]', 'meta[property="article:author"]']
+DETAIL_META_PUBLISHED_SELECTORS = ['meta[property="article:published_time"]', 'time[datetime]']
+
+STOP_SECTION_TITLES = {"може също да ти хареса", "additional links", "последвай ни"}
+
+MONTHS_BG = {
+    "януари": 1,
+    "февруари": 2,
+    "март": 3,
+    "април": 4,
+    "май": 5,
+    "юни": 6,
+    "юли": 7,
+    "август": 8,
+    "септември": 9,
+    "октомври": 10,
+    "ноември": 11,
+    "декември": 12,
+}
+
+PROGRAMATA_CATEGORY_SYNONYMS = {
+    "кино": "Кино",
+    "сцена": "Театър",
+    "театър": "Театър",
+    "музика": "Концерти",
+    "концерт": "Концерти",
+    "изложба": "Фестивали",
+    "изложения": "Фестивали",
+    "изложби": "Фестивали",
+    "литература": "Фестивали",
+    "градът": "Фестивали",
+    "фестивал": "Фестивали",
+    "спорт": "Спорт",
+}
+
+PROGRAMATA_DEFAULT_CATEGORY_NAME = "Фестивали"
+PROGRAMATA_DEFAULT_REGION_NAME = "Непосочен регион"
+
+EVENT_PAYLOAD_KEYS = [
+    "name_event",
+    "name_artist",
+    "place_event",
+    "id_event_category",
+    "id_user",
+    "id_region",
+    "start_date",
+    "start_hour",
+    "end_date",
+    "end_hour",
+    "picture",
+    "description",
+]
+
+SCHEDULE_LINE_RE = re.compile(
+    r"^(?P<start_day>\d{1,2})(?:\s*[-–]\s*(?P<end_day>\d{1,2}))?\s+(?P<month>[А-Яа-я]+)(?:\s+(?P<year>\d{4}))?(?:\s*,\s*(?P<time>\d{1,2}:\d{2})(?:\s*ч\.?))?(?:\s*,\s*(?P<place>.+))?$",
+    re.IGNORECASE,
+)
+
+DATE_RANGE_RE = re.compile(
+    r"(?P<start_day>\d{1,2})(?:\s*[-–]\s*(?P<end_day>\d{1,2}))?\s+(?P<month>[А-Яа-я]+)(?:\s+(?P<year>\d{4}))?",
+    re.IGNORECASE,
+)
 
 
 @dataclass(slots=True)
@@ -196,53 +259,464 @@ def load_lookup_maps(client: Client) -> tuple[dict[str, int], dict[str, int]]:
     return region_map, category_map
 
 
+def first_match_text(root: Tag | BeautifulSoup, selectors: list[str], attribute: str | None = None) -> str:
+    for selector in selectors:
+        element = root.select_one(selector)
+        if element is None:
+            continue
+
+        if attribute is not None:
+            value = element.get(attribute)
+            if value:
+                return clean_text(str(value))
+
+        text = clean_text(element.get_text(" ", strip=True))
+        if text:
+            return text
+
+    return ""
+
+
+def first_meta_content(root: BeautifulSoup, selectors: list[str]) -> str:
+    return first_match_text(root, selectors, attribute="content")
+
+
+def extract_card_href(card: Tag, base_url: str | None = None) -> str:
+    href = first_match_text(card, [CARD_LINK_SELECTOR], attribute="href")
+    if not href:
+        return ""
+    return urljoin(base_url or "", href)
+
+
+def extract_card_image(card: Tag, base_url: str | None = None) -> str:
+    src = first_match_text(card, [CARD_IMAGE_SELECTOR], attribute="src")
+    if not src:
+        return ""
+    return urljoin(base_url or "", src)
+
+
+def strip_trailing_year(value: str) -> str:
+    cleaned_value = clean_text(value).strip('"“”')
+    cleaned_value = re.sub(r"\s*[-–]\s*\d{4}$", "", cleaned_value)
+    return cleaned_value.strip('"“”')
+
+
+def parse_bulgarian_month(month_name: str) -> int:
+    month_key = normalize_lookup_key(month_name)
+    if month_key not in MONTHS_BG:
+        raise ValueError(f"Unsupported month name: {month_name}")
+    return MONTHS_BG[month_key]
+
+
+def parse_bulgarian_date_range(value: str, year_hint: int | None = None) -> tuple[str, str]:
+    cleaned_value = clean_text(value)
+    match = DATE_RANGE_RE.search(cleaned_value)
+    if match is None:
+        raise ValueError(f"Unsupported date format: {value}")
+
+    year_value = int(match.group("year") or year_hint or datetime.now().year)
+    month_value = parse_bulgarian_month(match.group("month"))
+    start_day = int(match.group("start_day"))
+    end_day = int(match.group("end_day") or start_day)
+
+    start_date = datetime(year_value, month_value, start_day).date().isoformat()
+    end_date = datetime(year_value, month_value, end_day).date().isoformat()
+    return start_date, end_date
+
+
+def parse_programata_schedule_line(value: str, year_hint: int | None = None) -> dict[str, str]:
+    cleaned_value = clean_text(value)
+    match = SCHEDULE_LINE_RE.match(cleaned_value)
+    if match is None:
+        raise ValueError(f"Unsupported schedule line: {value}")
+
+    year_value = int(match.group("year") or year_hint or datetime.now().year)
+    month_value = parse_bulgarian_month(match.group("month"))
+    start_day = int(match.group("start_day"))
+    end_day = int(match.group("end_day") or start_day)
+    start_date = datetime(year_value, month_value, start_day).date().isoformat()
+    end_date = datetime(year_value, month_value, end_day).date().isoformat()
+
+    time_value = match.group("time") or "00:00"
+    start_hour = parse_time_value(time_value)
+    end_hour = start_hour
+    place_value = clean_text(match.group("place") or "")
+
+    return {
+        "start_date": start_date,
+        "start_hour": start_hour,
+        "end_date": end_date,
+        "end_hour": end_hour,
+        "place_event": place_value,
+    }
+
+
+def infer_programata_category_name(source_url: str | None, page_text: str, breadcrumb_text: str = "") -> str:
+    combined_text = " ".join(part for part in [source_url or "", page_text, breadcrumb_text] if part).casefold()
+
+    if "kino" in combined_text:
+        return "Кино"
+    if "сцен" in combined_text or "теат" in combined_text:
+        return "Театър"
+    if "музик" in combined_text or "концерт" in combined_text:
+        return "Концерти"
+    if "спорт" in combined_text:
+        return "Спорт"
+    if "фестив" in combined_text:
+        return "Фестивали"
+    if "излож" in combined_text or "литератур" in combined_text or "град" in combined_text:
+        return PROGRAMATA_DEFAULT_CATEGORY_NAME
+
+    return PROGRAMATA_DEFAULT_CATEGORY_NAME
+
+
+def resolve_programata_category_id(
+    category_lookup: dict[str, int],
+    source_url: str | None,
+    page_text: str,
+    breadcrumb_text: str = "",
+) -> int:
+    category_name = infer_programata_category_name(source_url, page_text, breadcrumb_text)
+    try:
+        return resolve_lookup_id(category_name, category_lookup, "event category")
+    except ValueError:
+        fallback_key = normalize_lookup_key(PROGRAMATA_DEFAULT_CATEGORY_NAME)
+        if fallback_key in category_lookup:
+            return category_lookup[fallback_key]
+        return next(iter(category_lookup.values()))
+
+
+def resolve_programata_region_id(region_lookup: dict[str, int], page_text: str, place_text: str = "") -> int:
+    combined_text = normalize_lookup_key(" ".join(part for part in [page_text, place_text] if part))
+
+    if not combined_text:
+        fallback_key = normalize_lookup_key(PROGRAMATA_DEFAULT_REGION_NAME)
+        return region_lookup.get(fallback_key, 0)
+
+    if "софия" in combined_text:
+        for candidate in ("софия-град", "софия град", "софия"):
+            candidate_key = normalize_lookup_key(candidate)
+            if candidate_key in region_lookup:
+                return region_lookup[candidate_key]
+
+    ordered_regions = sorted(region_lookup.items(), key=lambda item: len(item[0]), reverse=True)
+    for region_name, region_id in ordered_regions:
+        if region_name == normalize_lookup_key(PROGRAMATA_DEFAULT_REGION_NAME):
+            continue
+        if region_name and region_name in combined_text:
+            return region_id
+
+    return region_lookup.get(normalize_lookup_key(PROGRAMATA_DEFAULT_REGION_NAME), 0)
+
+
+def extract_article_container(soup: BeautifulSoup) -> Tag | BeautifulSoup:
+    for selector in DETAIL_CONTAINER_SELECTORS:
+        container = soup.select_one(selector)
+        if container is not None:
+            return container
+    return soup
+
+
+def extract_article_metadata(
+    soup: BeautifulSoup,
+    card: Tag,
+    source_url: str,
+    default_user_id: int | None,
+    category_lookup: dict[str, int],
+    region_lookup: dict[str, int],
+) -> dict[str, Any]:
+    page_title = first_match_text(soup, DETAIL_TITLE_SELECTORS) or first_match_text(card, [CARD_TITLE_SELECTOR])
+    card_title = first_match_text(card, [CARD_TITLE_SELECTOR])
+    card_author = clean_text(first_match_text(card, [CARD_AUTHOR_SELECTOR]).removeprefix("от "))
+    article_author = first_meta_content(soup, DETAIL_META_AUTHOR_SELECTORS)
+    author_value = clean_text(article_author or card_author or "Програмата")
+
+    published_value = first_meta_content(soup, ['meta[property="article:published_time"]'])
+    if not published_value:
+        published_value = first_match_text(soup, ['time[datetime]'], attribute="datetime")
+    published_date = ""
+    published_time = "00:00:00"
+    if published_value:
+        try:
+            parsed_published = datetime.fromisoformat(published_value.replace("Z", "+00:00"))
+            published_date = parsed_published.date().isoformat()
+            published_time = parsed_published.time().strftime("%H:%M:%S")
+        except ValueError:
+            published_value = clean_text(published_value)
+
+    breadcrumb_parts: list[str] = []
+    for selector in DETAIL_BREADCRUMB_SELECTORS:
+        for element in soup.select(selector):
+            text = clean_text(element.get_text(" ", strip=True))
+            if text and text not in breadcrumb_parts:
+                breadcrumb_parts.append(text)
+    breadcrumb_text = " / ".join(breadcrumb_parts)
+    image_value = first_meta_content(soup, DETAIL_META_IMAGE_SELECTORS) or extract_card_image(card, source_url)
+    description_value = first_meta_content(soup, DETAIL_META_DESCRIPTION_SELECTORS)
+
+    container = extract_article_container(soup)
+    page_text = clean_text(container.get_text(" ", strip=True))
+    category_id = resolve_programata_category_id(category_lookup, source_url, page_text, breadcrumb_text)
+    region_id = resolve_programata_region_id(region_lookup, page_text, breadcrumb_text)
+    user_id = default_user_id if default_user_id is not None else 1
+
+    return {
+        "source_url": source_url,
+        "page_title": clean_text(page_title or card_title),
+        "card_title": clean_text(card_title),
+        "author": author_value,
+        "published_date": published_date,
+        "published_time": published_time,
+        "breadcrumb_text": clean_text(breadcrumb_text),
+        "page_text": page_text,
+        "picture": clean_text(image_value) or None,
+        "description": clean_text(description_value),
+        "id_event_category": category_id,
+        "id_region": region_id,
+        "id_user": user_id,
+        "year_hint": parsed_published.year if published_value and published_date else datetime.now().year,
+    }
+
+
+def collect_programata_blocks(container: Tag | BeautifulSoup, base_url: str) -> list[dict[str, Any]]:
+    blocks: list[dict[str, Any]] = []
+    current_block: dict[str, Any] | None = None
+    current_section = ""
+
+    for element in container.find_all(["h2", "h3", "p"], recursive=True):
+        text = clean_text(element.get_text(" ", strip=True))
+        if not text:
+            continue
+
+        lowered = text.casefold()
+        if lowered in STOP_SECTION_TITLES:
+            break
+
+        if element.name == "h2":
+            current_section = text
+            current_block = None
+            continue
+
+        if element.name == "h3":
+            anchor = element.select_one("a[href]")
+            raw_title = clean_text(anchor.get_text(" ", strip=True) if anchor is not None else text)
+            if not raw_title or "прочети още" in raw_title.casefold():
+                continue
+
+            current_block = {
+                "section": current_section,
+                "title": strip_trailing_year(raw_title),
+                "raw_title": raw_title,
+                "url": urljoin(base_url, anchor.get("href", "") if anchor is not None else ""),
+                "description_parts": [],
+            }
+            blocks.append(current_block)
+            continue
+
+        if element.name == "p":
+            if current_block is None:
+                continue
+            current_block["description_parts"].append(text)
+
+    return blocks
+
+
+def build_programata_event_dict(
+    block: dict[str, Any],
+    metadata: dict[str, Any],
+    base_url: str,
+) -> dict[str, Any]:
+    description_parts = [clean_text(part) for part in block.get("description_parts", []) if clean_text(part)]
+    schedule: dict[str, str] = {}
+    remaining_description = description_parts[:]
+
+    if remaining_description:
+        first_line = remaining_description[0]
+        try:
+            schedule = parse_programata_schedule_line(first_line, metadata.get("year_hint"))
+            remaining_description = remaining_description[1:]
+        except ValueError:
+            schedule = {}
+
+    if not schedule:
+        try:
+            start_date, end_date = parse_bulgarian_date_range(metadata.get("page_title", ""), metadata.get("year_hint"))
+        except ValueError:
+            if metadata.get("published_date"):
+                start_date = metadata["published_date"]
+                end_date = metadata["published_date"]
+            else:
+                today_value = datetime.now().date().isoformat()
+                start_date = today_value
+                end_date = today_value
+
+        schedule = {
+            "start_date": start_date,
+            "end_date": end_date,
+            "start_hour": metadata.get("published_time", "00:00:00") or "00:00:00",
+            "end_hour": metadata.get("published_time", "00:00:00") or "00:00:00",
+            "place_event": "",
+        }
+
+    block_url = urljoin(base_url, block.get("url", "")) if block.get("url") else base_url
+    combined_description = clean_text(" ".join(remaining_description))
+    if not combined_description:
+        combined_description = metadata.get("description", "")
+
+    event_dict = {
+        "name_event": block.get("title") or metadata.get("page_title") or metadata.get("card_title") or "",
+        "name_artist": metadata.get("author") or "Програмата",
+        "place_event": schedule.get("place_event", ""),
+        "id_event_category": metadata["id_event_category"],
+        "id_user": metadata["id_user"],
+        "id_region": metadata["id_region"],
+        "start_date": schedule["start_date"],
+        "start_hour": schedule["start_hour"],
+        "end_date": schedule["end_date"],
+        "end_hour": schedule["end_hour"],
+        "picture": metadata.get("picture"),
+        "description": combined_description,
+        "source_url": block_url,
+        "section_title": block.get("section", ""),
+        "card_title": metadata.get("card_title", ""),
+    }
+
+    if not event_dict["place_event"]:
+        event_dict["place_event"] = schedule.get("place_event", "")
+
+    event_dict["name_event"] = clean_text(strip_trailing_year(event_dict["name_event"]))
+    event_dict["description"] = clean_text(event_dict["description"])
+    event_dict["picture"] = clean_text(event_dict["picture"]) or None
+
+    return event_dict
+
+
 def parse_event_card(
     card: Tag,
     region_lookup: dict[str, int],
     category_lookup: dict[str, int],
     default_user_id: int | None,
-) -> EventRecord:
-    name_event = first_attr(card, ["data-event-name"]) or first_text(card, TITLE_SELECTORS)
-    name_artist = first_attr(card, ["data-event-artist"]) or first_text(card, ARTIST_SELECTORS)
-    place_event = first_attr(card, ["data-event-place"]) or first_text(card, PLACE_SELECTORS)
-    category_raw = first_attr(card, ["data-event-category-id", "data-event-category"]) or first_text(card, CATEGORY_SELECTORS)
-    region_raw = first_attr(card, ["data-region-id", "data-region"]) or first_text(card, REGION_SELECTORS)
+    source_url: str | None = None,
+) -> list[dict[str, Any]]:
+    detail_url = extract_card_href(card, source_url)
+    card_title = clean_text(first_match_text(card, [CARD_TITLE_SELECTOR]))
+    card_author = clean_text(first_match_text(card, [CARD_AUTHOR_SELECTOR]).removeprefix("от "))
+    card_image = extract_card_image(card, source_url)
 
-    start_date_raw = first_attr(card, ["data-start-date", "data-date-start"]) or first_text_or_datetime(card, START_DATE_SELECTORS)
-    start_time_raw = first_attr(card, ["data-start-hour", "data-start-time"]) or first_text_or_datetime(card, START_TIME_SELECTORS)
-    end_date_raw = first_attr(card, ["data-end-date", "data-date-end"]) or first_text_or_datetime(card, END_DATE_SELECTORS)
-    end_time_raw = first_attr(card, ["data-end-hour", "data-end-time"]) or first_text_or_datetime(card, END_TIME_SELECTORS)
+    if not detail_url:
+        fallback_category_name = infer_programata_category_name(None, card_title)
+        fallback_category_id = resolve_programata_category_id(category_lookup, None, card_title)
+        fallback_region_id = resolve_programata_region_id(region_lookup, card_title)
+        start_date = datetime.now().date().isoformat()
+        fallback_event = {
+            "name_event": strip_trailing_year(card_title),
+            "name_artist": card_author or "Програмата",
+            "place_event": "",
+            "id_event_category": fallback_category_id,
+            "id_user": default_user_id if default_user_id is not None else 1,
+            "id_region": fallback_region_id,
+            "start_date": start_date,
+            "start_hour": "00:00:00",
+            "end_date": start_date,
+            "end_hour": "00:00:00",
+            "picture": card_image or None,
+            "description": "",
+            "source_url": "",
+            "section_title": fallback_category_name,
+            "card_title": card_title,
+        }
+        return [fallback_event]
 
-    description = first_attr(card, ["data-event-description"]) or first_text(card, DESCRIPTION_SELECTORS)
-    picture = first_attr(card, ["data-picture"])
-    if not picture:
-        image = card.select_one("img")
-        if image is not None:
-            picture = clean_text(image.get("src")) or None
+    try:
+        html = fetch_html(detail_url)
+    except RequestException as exc:
+        logger.warning("Falling back to card-only parsing for %s: %s", detail_url, exc)
+        fallback_category_id = resolve_programata_category_id(category_lookup, detail_url, card_title)
+        fallback_region_id = resolve_programata_region_id(region_lookup, card_title)
+        start_date = datetime.now().date().isoformat()
+        return [
+            {
+                "name_event": strip_trailing_year(card_title),
+                "name_artist": card_author or "Програмата",
+                "place_event": "",
+                "id_event_category": fallback_category_id,
+                "id_user": default_user_id if default_user_id is not None else 1,
+                "id_region": fallback_region_id,
+                "start_date": start_date,
+                "start_hour": "00:00:00",
+                "end_date": start_date,
+                "end_hour": "00:00:00",
+                "picture": card_image or None,
+                "description": "",
+                "source_url": detail_url,
+                "section_title": "",
+                "card_title": card_title,
+            }
+        ]
 
-    if not name_event:
-        raise ValueError("Missing event name")
-    if not name_artist:
-        raise ValueError("Missing artist name")
-    if not place_event:
-        place_event = ""
-    if not description:
-        description = ""
-
-    return EventRecord(
-        name_event=name_event,
-        name_artist=name_artist,
-        place_event=place_event,
-        id_event_category=resolve_lookup_id(category_raw, category_lookup, "event category"),
-        id_user=resolve_owner_user_id(card, default_user_id),
-        id_region=resolve_lookup_id(region_raw, region_lookup, "region"),
-        start_date=parse_date_value(start_date_raw),
-        start_hour=parse_time_value(start_time_raw),
-        end_date=parse_date_value(end_date_raw),
-        end_hour=parse_time_value(end_time_raw),
-        picture=picture or None,
-        description=description,
+    soup = BeautifulSoup(html, "html.parser")
+    metadata = extract_article_metadata(
+        soup,
+        card,
+        detail_url,
+        default_user_id,
+        category_lookup,
+        region_lookup,
     )
+
+    container = extract_article_container(soup)
+    blocks = collect_programata_blocks(container, detail_url)
+
+    if not blocks:
+        page_title = metadata.get("page_title") or card_title
+        try:
+            start_date, end_date = parse_bulgarian_date_range(page_title, metadata.get("year_hint"))
+        except ValueError:
+            start_date = metadata.get("published_date") or datetime.now().date().isoformat()
+            end_date = start_date
+
+        fallback_event = {
+            "name_event": strip_trailing_year(page_title),
+            "name_artist": metadata.get("author") or card_author or "Програмата",
+            "place_event": "",
+            "id_event_category": metadata["id_event_category"],
+            "id_user": metadata["id_user"],
+            "id_region": metadata["id_region"],
+            "start_date": start_date,
+            "start_hour": metadata.get("published_time", "00:00:00"),
+            "end_date": end_date,
+            "end_hour": metadata.get("published_time", "00:00:00"),
+            "picture": metadata.get("picture") or card_image or None,
+            "description": metadata.get("description", ""),
+            "source_url": detail_url,
+            "section_title": metadata.get("breadcrumb_text", ""),
+            "card_title": card_title,
+        }
+        return [fallback_event]
+
+    events: list[dict[str, Any]] = []
+    seen_keys: set[tuple[Any, ...]] = set()
+
+    for block in blocks:
+        event_dict = build_programata_event_dict(block, metadata, detail_url)
+        dedupe_key = (
+            event_dict["name_event"],
+            event_dict["name_artist"],
+            event_dict["place_event"],
+            event_dict["id_event_category"],
+            event_dict["id_user"],
+            event_dict["id_region"],
+            event_dict["start_date"],
+            event_dict["start_hour"],
+            event_dict["end_date"],
+            event_dict["end_hour"],
+        )
+        if dedupe_key in seen_keys:
+            continue
+        seen_keys.add(dedupe_key)
+        events.append(event_dict)
+
+    return events
 
 
 def parse_events(
@@ -250,17 +724,36 @@ def parse_events(
     region_lookup: dict[str, int],
     category_lookup: dict[str, int],
     default_user_id: int | None,
-) -> list[EventRecord]:
+    source_url: str | None = None,
+) -> list[dict[str, Any]]:
     soup = BeautifulSoup(html, "html.parser")
     cards = soup.select(EVENT_CARD_SELECTOR)
 
-    records: list[EventRecord] = []
+    records: list[dict[str, Any]] = []
+    seen_keys: set[tuple[Any, ...]] = set()
+
     for index, card in enumerate(cards, start=1):
         if not isinstance(card, Tag):
             continue
         try:
-            record = parse_event_card(card, region_lookup, category_lookup, default_user_id)
-            records.append(record)
+            parsed_events = parse_event_card(card, region_lookup, category_lookup, default_user_id, source_url)
+            for event in parsed_events:
+                dedupe_key = (
+                    event["name_event"],
+                    event["name_artist"],
+                    event["place_event"],
+                    event["id_event_category"],
+                    event["id_user"],
+                    event["id_region"],
+                    event["start_date"],
+                    event["start_hour"],
+                    event["end_date"],
+                    event["end_hour"],
+                )
+                if dedupe_key in seen_keys:
+                    continue
+                seen_keys.add(dedupe_key)
+                records.append(event)
         except ValueError as exc:
             logger.warning("Skipping card %s: %s", index, exc)
 
@@ -285,6 +778,17 @@ def fetch_html(url: str, timeout_seconds: int = 30) -> str:
         raise
 
 
+def event_value(event: dict[str, Any], key: str, default: Any = "") -> Any:
+    value = event.get(key, default)
+    if value is None:
+        return default
+    return value
+
+
+def build_event_payload(event: dict[str, Any]) -> dict[str, Any]:
+    return {key: event_value(event, key) for key in EVENT_PAYLOAD_KEYS}
+
+
 def create_supabase_client() -> Client:
     supabase_url = os.environ.get("SUPABASE_URL")
     service_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or os.environ.get("SUPABASE_SERVICE_KEY")
@@ -304,20 +808,20 @@ def verify_supabase_connection(client: Client) -> None:
         raise RuntimeError(f"Could not connect to Supabase: {exc}") from exc
 
 
-def find_existing_event_id(client: Client, event: EventRecord) -> int | None:
+def find_existing_event_id(client: Client, event: dict[str, Any]) -> int | None:
     query = (
         client.table("events")
         .select("id_event")
-        .eq("name_event", event.name_event)
-        .eq("name_artist", event.name_artist)
-        .eq("place_event", event.place_event)
-        .eq("id_event_category", event.id_event_category)
-        .eq("id_user", event.id_user)
-        .eq("id_region", event.id_region)
-        .eq("start_date", event.start_date)
-        .eq("start_hour", event.start_hour)
-        .eq("end_date", event.end_date)
-        .eq("end_hour", event.end_hour)
+        .eq("name_event", event_value(event, "name_event"))
+        .eq("name_artist", event_value(event, "name_artist"))
+        .eq("place_event", event_value(event, "place_event"))
+        .eq("id_event_category", event_value(event, "id_event_category"))
+        .eq("id_user", event_value(event, "id_user"))
+        .eq("id_region", event_value(event, "id_region"))
+        .eq("start_date", event_value(event, "start_date"))
+        .eq("start_hour", event_value(event, "start_hour"))
+        .eq("end_date", event_value(event, "end_date"))
+        .eq("end_hour", event_value(event, "end_hour"))
         .limit(1)
     )
     response = query.execute()
@@ -327,19 +831,19 @@ def find_existing_event_id(client: Client, event: EventRecord) -> int | None:
     return int(rows[0]["id_event"])
 
 
-def upsert_event(client: Client, event: EventRecord) -> dict[str, Any]:
-    payload = event.to_payload()
+def upsert_event(client: Client, event: dict[str, Any]) -> dict[str, Any]:
+    payload = build_event_payload(event)
     existing_id = find_existing_event_id(client, event)
 
     try:
         if existing_id is None:
             response = client.table("events").insert(payload).execute()
-            logger.info("Inserted event: %s", event.name_event)
+            logger.info("Inserted event: %s", event_value(event, "name_event"))
         else:
             response = client.table("events").update(payload).eq("id_event", existing_id).execute()
-            logger.info("Updated event %s: %s", existing_id, event.name_event)
+            logger.info("Updated event %s: %s", existing_id, event_value(event, "name_event"))
     except Exception as exc:  # supabase-py raises multiple exception types depending on the failure.
-        logger.error("Failed to upsert event '%s': %s", event.name_event, exc)
+        logger.error("Failed to upsert event '%s': %s", event_value(event, "name_event"), exc)
         raise
 
     if response.data:
@@ -367,7 +871,7 @@ def main() -> int:
         region_lookup, category_lookup = load_lookup_maps(client)
 
         html = fetch_html(args.url)
-        events = parse_events(html, region_lookup, category_lookup, args.default_user_id)
+        events = parse_events(html, region_lookup, category_lookup, args.default_user_id, args.url)
 
         if not events:
             logger.warning("No events found on the page.")
