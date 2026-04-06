@@ -1,9 +1,10 @@
 import React from 'react';
-import { Button, message } from 'antd';
+import { Button, Modal, message } from 'antd';
 import { HeartFilled, HeartOutlined } from '@ant-design/icons';
 import { useUnit } from 'effector-react';
 import { $likedEventIds, toggleEventLikeFx } from '../entities/events/model';
 import { $user } from '../entities/model';
+import { history } from '../shared/routing';
 
 type EventLikeButtonProps = {
   eventId: string;
@@ -23,7 +24,20 @@ const EventLikeButton: React.FC<EventLikeButtonProps> = ({ eventId, compact = fa
 
   const handleClick = async () => {
     if (!user) {
-      message.info('Влез в профила си, за да харесваш събития.');
+      Modal.confirm({
+        title: 'Вход или регистрация',
+        centered: true,
+        okText: 'Вход / регистрация',
+        cancelText: 'Отказ',
+        content: (
+          <div style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+            За да харесваш събития, трябва да влезеш в профила си или да си направиш акаунт в CULTURO BG.
+          </div>
+        ),
+        onOk: () => {
+          history.push('/login');
+        },
+      });
       return;
     }
 

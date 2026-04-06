@@ -1,5 +1,8 @@
 import React from 'react';
 import Hero from './Hero';
+import { Typography } from 'antd';
+
+const { Text } = Typography;
 
 const Home: React.FC = () => {
   return (
@@ -11,6 +14,9 @@ const Home: React.FC = () => {
           <div style={{ padding: '24px', background: '#f5f5f5', borderRadius: '8px' }}>
             <h3>Персонализация</h3>
             <p>Откриване на събития според твоите интереси.</p>
+            <Text style={{ display: 'block', marginTop: '12px', color: 'var(--accent)', fontWeight: 600 }}>
+              Направи си акаунт в CULTURO BG, за тази функция.
+            </Text>
           </div>
           <div style={{ padding: '24px', background: '#f5f5f5', borderRadius: '8px' }}>
             <h3>Бърз достъп</h3>
@@ -19,6 +25,9 @@ const Home: React.FC = () => {
           <div style={{ padding: '24px', background: '#f5f5f5', borderRadius: '8px' }}>
             <h3>Уведомления</h3>
             <p>Никога не изпускай интересно събитие.</p>
+            <Text style={{ display: 'block', marginTop: '12px', color: 'var(--accent)', fontWeight: 600 }}>
+              Направи си акаунт в CULTURO BG, за тази функция.
+            </Text>
           </div>
         </div>
       </div>
