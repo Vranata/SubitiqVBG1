@@ -822,14 +822,57 @@ def build_event_payload(event: dict[str, Any]) -> dict[str, Any]:
     return {key: event_value(event, key) for key in EVENT_PAYLOAD_KEYS}
 
 
+def resolve_default_user_id(client: Client, explicit_user_id: int | None) -> int:
+    if explicit_user_id is not None:
+        return explicit_user_id
+
+    session = client.auth.get_session()
+    auth_user_id = getattr(getattr(session, "user", None), "id", None)
+
+    if auth_user_id:
+        response = (
+            client.table("users")
+            .select("id_user")
+            .eq("auth_user_id", auth_user_id)
+            .maybe_single()
+            .execute()
+        )
+        if response.data:
+            return int(response.data["id_user"])
+
+    return 1
+
+
 def create_supabase_client() -> Client:
     supabase_url = os.environ.get("SUPABASE_URL")
     service_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or os.environ.get("SUPABASE_SERVICE_KEY")
 
     if not supabase_url or not service_key:
-        raise RuntimeError(
-            "Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY before running the scraper."
-        )
+        anon_key = os.environ.get("SUPABASE_ANON_KEY")
+        auth_email = os.environ.get("SCRAPER_AUTH_EMAIL")
+        auth_password = os.environ.get("SCRAPER_AUTH_PASSWORD")
+
+        if not supabase_url:
+            raise RuntimeError("Set SUPABASE_URL before running the scraper.")
+
+        if not anon_key:
+            raise RuntimeError(
+                "Set SUPABASE_SERVICE_ROLE_KEY or SUPABASE_ANON_KEY before running the scraper."
+            )
+
+        if not auth_email or not auth_password:
+            raise RuntimeError(
+                "Set SCRAPER_AUTH_EMAIL and SCRAPER_AUTH_PASSWORD when using SUPABASE_ANON_KEY."
+            )
+
+        client = create_client(supabase_url, anon_key)
+        client.auth.sign_in_with_password({"email": auth_email, "password": auth_password})
+
+        session = client.auth.get_session()
+        if session is None:
+            raise RuntimeError("Supabase login succeeded but no session was created.")
+
+        return client
 
     return create_client(supabase_url, service_key)
 
@@ -903,9 +946,10 @@ def main() -> int:
         client = create_supabase_client()
         verify_supabase_connection(client)
         region_lookup, category_lookup = load_lookup_maps(client)
+        default_user_id = resolve_default_user_id(client, args.default_user_id)
 
         html = fetch_html(args.url)
-        events = parse_events(html, region_lookup, category_lookup, args.default_user_id, args.url)
+        events = parse_events(html, region_lookup, category_lookup, default_user_id, args.url)
 
         if not events:
             logger.warning("No events found on the page.")
