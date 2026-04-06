@@ -2,7 +2,7 @@ import type { Session } from '@supabase/supabase-js';
 import { redirect } from 'atomic-router';
 import { createEffect, createEvent, createStore, sample } from 'effector';
 import { routes } from '../shared/routing';
-import { getSession, signIn, signOut, signUp, type AuthCredentials } from '../shared/api/auth';
+import { getSession, resetPassword, signIn, signOut, signUp, updatePassword, type AuthCredentials, type ResetPasswordPayload, type UpdatePasswordPayload } from '../shared/api/auth';
 import { supabase } from '../services/supabaseClient';
 
 const goHome = createEvent<void>();
@@ -56,6 +56,14 @@ const roleFallbacks: Record<UserRole, { note: string }> = {
 const adminBootstrapEmail = 'culturobg@gmail.com';
 
 const isBootstrapAdminEmail = (email: string | null | undefined) => email?.toLowerCase() === adminBootstrapEmail;
+
+const isRecoveryRoute = () => {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  return new URLSearchParams(window.location.search).get('mode') === 'recovery';
+};
 
 const buildFallbackUser = (session: Session): AppUser => ({
   id: session.user.id,
@@ -122,6 +130,8 @@ export const checkSession = createEvent<void>();
 export const authStateChanged = createEvent<Session | null>();
 export const signInFx = createEffect(async ({ email, password }: AuthCredentials) => signIn(email, password));
 export const signUpFx = createEffect(async ({ email, password }: AuthCredentials) => signUp(email, password));
+export const resetPasswordFx = createEffect(async (payload: ResetPasswordPayload) => resetPassword(payload));
+export const updatePasswordFx = createEffect(async ({ password }: UpdatePasswordPayload) => updatePassword({ password }));
 export const signOutFx = createEffect(async () => signOut());
 export const startAuthSyncFx = createEffect(() => {
   supabase.auth.onAuthStateChange((_, session) => {
@@ -176,7 +186,7 @@ sample({
 sample({
   clock: routes.login.opened,
   source: $isAuthenticated,
-  filter: (isAuthenticated: boolean) => isAuthenticated,
+  filter: (isAuthenticated: boolean) => isAuthenticated && !isRecoveryRoute(),
   fn: () => undefined,
   target: goHome,
 });
