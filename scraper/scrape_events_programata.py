@@ -13,6 +13,7 @@ import os
 import re
 from dataclasses import dataclass
 from datetime import datetime
+from functools import lru_cache
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
@@ -78,6 +79,14 @@ PROGRAMATA_CATEGORY_SYNONYMS = {
 PROGRAMATA_DEFAULT_CATEGORY_NAME = "Фестивали"
 PROGRAMATA_DEFAULT_REGION_NAME = "Непосочен регион"
 PROGRAMATA_DEFAULT_SOURCE_URL = "https://programata.bg/"
+GOOGLE_REGION_LOOKUP_ENABLED = os.environ.get("SCRAPER_REGION_LOOKUP_GOOGLE", "1").strip().casefold() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+GOOGLE_REGION_LOOKUP_TIMEOUT_SECONDS = 8
+GOOGLE_SEARCH_URL = "https://www.google.com/search"
 
 PROGRAMATA_PATH_CATEGORY_HINTS = [
     ("/kino/", "Кино"),
@@ -255,6 +264,123 @@ def parse_time_value(raw_value: str) -> str:
 
 def normalize_lookup_key(value: str) -> str:
     return clean_text(value).casefold()
+
+
+def normalize_region_key(value: str) -> str:
+    normalized_value = normalize_lookup_key(value)
+    normalized_value = normalized_value.replace("–", " ").replace("-", " ")
+    normalized_value = re.sub(r"[.,;:/()\"'“”„]+", " ", normalized_value)
+    normalized_value = re.sub(r"\s+", " ", normalized_value)
+    return normalized_value.strip()
+
+
+def lookup_region_id_by_names(region_lookup: dict[str, int], candidate_names: list[str]) -> int | None:
+    normalized_candidates = [normalize_region_key(candidate) for candidate in candidate_names if clean_text(candidate)]
+    if not normalized_candidates:
+        return None
+
+    for region_name, region_id in region_lookup.items():
+        normalized_region_name = normalize_region_key(region_name)
+        for candidate_name in normalized_candidates:
+            if normalized_region_name == candidate_name:
+                return region_id
+            if candidate_name in normalized_region_name:
+                return region_id
+            if normalized_region_name in candidate_name:
+                return region_id
+
+    return None
+
+
+def build_region_alias_lookup(region_lookup: dict[str, int]) -> dict[str, int]:
+    alias_lookup: dict[str, int] = {}
+
+    for region_name, region_id in region_lookup.items():
+        normalized_region_name = normalize_region_key(region_name)
+        if normalized_region_name:
+            alias_lookup[normalized_region_name] = region_id
+
+    sofia_city_id = lookup_region_id_by_names(
+        region_lookup,
+        [
+            "София – град",
+            "София - град",
+            "София-град",
+            "София град",
+            "София",
+            "гр. София",
+            "гр София",
+            "Столицата",
+        ],
+    )
+    if sofia_city_id is not None:
+        for alias in ["София", "гр. София", "гр София", "София град", "София-град", "Столицата"]:
+            alias_lookup[normalize_region_key(alias)] = sofia_city_id
+
+    sofia_oblast_id = lookup_region_id_by_names(
+        region_lookup,
+        ["Софийска област", "София област", "Област София", "обл. София", "обл София"],
+    )
+    if sofia_oblast_id is not None:
+        for alias in ["Софийска област", "София област", "Област София", "обл. София", "обл София"]:
+            alias_lookup[normalize_region_key(alias)] = sofia_oblast_id
+
+    return alias_lookup
+
+
+def resolve_region_id_from_text(text: str, alias_lookup: dict[str, int]) -> int | None:
+    normalized_text = normalize_region_key(text)
+    if not normalized_text:
+        return None
+
+    ordered_aliases = sorted(alias_lookup.items(), key=lambda item: len(item[0]), reverse=True)
+    for alias, region_id in ordered_aliases:
+        if alias and alias in normalized_text:
+            return region_id
+
+    return None
+
+
+@lru_cache(maxsize=256)
+def fetch_google_region_text(query_text: str) -> str:
+    cleaned_query = clean_text(query_text)
+    if not cleaned_query:
+        return ""
+
+    response = requests.get(
+        GOOGLE_SEARCH_URL,
+        params={"q": cleaned_query, "hl": "bg", "gl": "bg", "num": "5"},
+        headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CulturoBG-Scraper/1.0",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "bg-BG,bg;q=0.9,en;q=0.8",
+        },
+        timeout=GOOGLE_REGION_LOOKUP_TIMEOUT_SECONDS,
+    )
+    response.raise_for_status()
+
+    page_text = response.text.casefold()
+    if "unusual traffic" in page_text or "необичаен трафик" in page_text:
+        return ""
+
+    return clean_text(BeautifulSoup(response.text, "html.parser").get_text(" ", strip=True))
+
+
+def resolve_region_id_via_google(query_text: str, alias_lookup: dict[str, int]) -> int | None:
+    if not GOOGLE_REGION_LOOKUP_ENABLED:
+        return None
+
+    cleaned_query = clean_text(query_text)
+    if not cleaned_query:
+        return None
+
+    try:
+        google_text = fetch_google_region_text(cleaned_query)
+    except RequestException as exc:
+        logger.debug("Google region lookup failed for %s: %s", cleaned_query, exc)
+        return None
+
+    return resolve_region_id_from_text(google_text, alias_lookup)
 
 
 def resolve_lookup_id(raw_value: str, lookup_map: dict[str, int], label: str) -> int:
@@ -552,39 +678,20 @@ def resolve_programata_category_id(
 
 
 def resolve_programata_region_id(region_lookup: dict[str, int], page_text: str, place_text: str = "") -> int:
-    place_text_value = normalize_lookup_key(place_text)
-    page_text_value = normalize_lookup_key(page_text)
-    fallback_region_id = (
-        region_lookup.get(normalize_lookup_key(PROGRAMATA_DEFAULT_REGION_NAME))
-        or region_lookup.get(0)
-        or 0
-    )
+    place_text_value = clean_text(place_text)
+    page_text_value = clean_text(page_text)
+    fallback_region_id = region_lookup.get(normalize_lookup_key(PROGRAMATA_DEFAULT_REGION_NAME)) or 0
+    alias_lookup = build_region_alias_lookup(region_lookup)
 
-    if not place_text_value and not page_text_value:
-        return fallback_region_id
-
-    ordered_regions = sorted(region_lookup.items(), key=lambda item: len(item[0]), reverse=True)
-
-    for region_name, region_id in ordered_regions:
-        if region_name == normalize_lookup_key(PROGRAMATA_DEFAULT_REGION_NAME):
-            continue
-        if region_name and region_name in place_text_value:
+    for text_value in [place_text_value, page_text_value]:
+        region_id = resolve_region_id_from_text(text_value, alias_lookup)
+        if region_id is not None:
             return region_id
 
-    for region_name, region_id in ordered_regions:
-        if region_name == normalize_lookup_key(PROGRAMATA_DEFAULT_REGION_NAME):
-            continue
-        if region_name and region_name in page_text_value:
-            return region_id
-
-    if "софия" in place_text_value or "софия" in page_text_value:
-        sofia_region_id = (
-            region_lookup.get(normalize_lookup_key("София-град"))
-            or region_lookup.get(normalize_lookup_key("София град"))
-            or region_lookup.get(normalize_lookup_key("София"))
-        )
-        if sofia_region_id is not None:
-            return sofia_region_id
+    google_query_text = place_text_value or page_text_value
+    google_region_id = resolve_region_id_via_google(google_query_text, alias_lookup)
+    if google_region_id is not None:
+        return google_region_id
 
     return fallback_region_id
 
@@ -637,7 +744,8 @@ def extract_article_metadata(
     container = extract_article_container(soup)
     page_text = extract_programata_content_text(container)
     category_id = resolve_programata_category_id(category_lookup, source_url, page_text, breadcrumb_text, card_title=card_title)
-    region_id = resolve_programata_region_id(region_lookup, page_text, breadcrumb_text)
+    region_location_text = " ".join(part for part in [page_text, breadcrumb_text, page_title, card_title] if part)
+    region_id = resolve_programata_region_id(region_lookup, region_location_text)
     user_id = default_user_id if default_user_id is not None else 1
 
     return {
@@ -706,6 +814,7 @@ def build_programata_event_dict(
     metadata: dict[str, Any],
     base_url: str,
     category_lookup: dict[str, int],
+    region_lookup: dict[str, int],
 ) -> list[dict[str, Any]] | None:
     description_parts = [clean_text(part) for part in block.get("description_parts", []) if clean_text(part)]
     if not description_parts:
@@ -730,6 +839,17 @@ def build_programata_event_dict(
         combined_description = clean_text(" ".join(description_chunks))
         if not combined_description:
             combined_description = metadata.get("description", "")
+        region_context_text = " ".join(
+            part
+            for part in [
+                metadata.get("page_text", ""),
+                metadata.get("breadcrumb_text", ""),
+                block.get("section", ""),
+                block.get("title", ""),
+                combined_description,
+            ]
+            if part
+        )
 
         event_dict = {
             "name_event": block.get("title") or metadata.get("page_title") or metadata.get("card_title") or "",
@@ -737,7 +857,7 @@ def build_programata_event_dict(
             "place_event": schedule.get("place_event", ""),
             "id_event_category": block_category_id,
             "id_user": metadata["id_user"],
-            "id_region": metadata["id_region"],
+            "id_region": resolve_programata_region_id(region_lookup, region_context_text, schedule.get("place_event", "")),
             "start_date": schedule["start_date"],
             "start_hour": schedule["start_hour"],
             "end_date": schedule["end_date"],
@@ -794,7 +914,19 @@ def build_programata_event_from_schedule(
     description_value = clean_text(metadata.get("description", "") or metadata.get("page_text", ""))
     place_value = clean_text(place_event or schedule.get("place_event", ""))
     region_hint_value = clean_text(schedule.get("region_hint", ""))
-    region_lookup_text = " ".join(part for part in [region_hint_value, place_value] if part)
+    region_lookup_text = " ".join(
+        part
+        for part in [
+            region_hint_value,
+            place_value,
+            metadata.get("page_text", ""),
+            metadata.get("breadcrumb_text", ""),
+            section_title,
+            event_name,
+            description_value,
+        ]
+        if part
+    )
 
     event_dict = {
         "name_event": clean_text(strip_trailing_year(event_name)),
@@ -809,7 +941,7 @@ def build_programata_event_from_schedule(
             event_name,
         ),
         "id_user": metadata["id_user"],
-        "id_region": resolve_programata_region_id(region_lookup, description_value, region_lookup_text),
+        "id_region": resolve_programata_region_id(region_lookup, region_lookup_text, place_value),
         "start_date": schedule["start_date"],
         "start_hour": schedule["start_hour"],
         "end_date": schedule["end_date"],
@@ -1079,13 +1211,18 @@ def parse_event_card(
             )
             return [event for event in fallback_events if not is_event_in_past(event)]
 
+        fallback_region_text = " ".join(
+            part
+            for part in [metadata.get("page_text", ""), metadata.get("breadcrumb_text", ""), page_title, card_title, metadata.get("description", "")]
+            if part
+        )
         fallback_event = {
             "name_event": strip_trailing_year(page_title),
             "name_artist": metadata.get("author") or card_author or "Програмата",
             "place_event": "",
             "id_event_category": metadata["id_event_category"],
             "id_user": metadata["id_user"],
-            "id_region": metadata["id_region"],
+            "id_region": resolve_programata_region_id(region_lookup, fallback_region_text),
             "start_date": schedule["start_date"],
             "start_hour": schedule["start_hour"],
             "end_date": schedule["end_date"],
@@ -1098,14 +1235,14 @@ def parse_event_card(
         }
 
         if is_event_in_past(fallback_event):
-                        return []
+            return []
         return [fallback_event]
 
     events: list[dict[str, Any]] = []
     seen_keys: set[tuple[Any, ...]] = set()
 
     for block in blocks:
-        block_events = build_programata_event_dict(block, metadata, detail_url, category_lookup)
+        block_events = build_programata_event_dict(block, metadata, detail_url, category_lookup, region_lookup)
         if not block_events:
             continue
         for event_dict in block_events:
