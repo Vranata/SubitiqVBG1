@@ -17,6 +17,21 @@ as $$
   end;
 $$;
 
+create or replace function public.normalize_event_dedupe_text(input_text text)
+returns text
+language sql
+immutable
+as $$
+  select btrim(
+    regexp_replace(
+      regexp_replace(lower(coalesce(input_text, '')), '[[:punct:]]+', ' ', 'g'),
+      '\\s+',
+      ' ',
+      'g'
+    )
+  );
+$$;
+
 create or replace function public.current_user_role_id()
 returns smallint
 language sql
@@ -255,6 +270,17 @@ create index if not exists idx_users_region on public.users (id_region);
 create index if not exists idx_events_category on public.events (id_event_category);
 create index if not exists idx_events_user on public.events (id_user);
 create index if not exists idx_events_region on public.events (id_region);
+create unique index if not exists uq_events_programata_canonical_key on public.events (
+  public.normalize_event_dedupe_text(name_event),
+  public.normalize_event_dedupe_text(name_artist),
+  public.normalize_event_dedupe_text(place_event),
+  id_event_category,
+  id_user,
+  start_date,
+  start_hour,
+  end_date,
+  end_hour
+);
 create index if not exists idx_user_likings_event_category on public.user_likings (id_event_category);
 create index if not exists idx_user_upgrade_requests_auth_user on public.user_upgrade_requests (auth_user_id);
 

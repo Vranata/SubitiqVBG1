@@ -1799,6 +1799,11 @@ def sync_existing_event_cache(
     existing_events.append(stored_event)
 
 
+def is_duplicate_key_violation(exc: Exception) -> bool:
+    message = str(exc).casefold()
+    return "duplicate key value violates unique constraint" in message or "unique constraint" in message and "duplicate" in message
+
+
 def upsert_event(
     client: Client,
     event: dict[str, Any],
@@ -1809,10 +1814,44 @@ def upsert_event(
 
     try:
         if not matching_events:
-            response = client.table("events").insert(payload).execute()
-            logger.info("Inserted event: %s", event_value(event, "name_event"))
-            if existing_events is not None and response.data:
-                sync_existing_event_cache(existing_events, [], response.data[0])
+            try:
+                response = client.table("events").insert(payload).execute()
+                logger.info("Inserted event: %s", event_value(event, "name_event"))
+                if existing_events is not None and response.data:
+                    sync_existing_event_cache(existing_events, [], response.data[0])
+            except Exception as insert_exc:
+                if not is_duplicate_key_violation(insert_exc):
+                    raise
+
+                matching_events = find_existing_event_matches(client, event, existing_events)
+                if not matching_events:
+                    raise
+
+                canonical_event = choose_canonical_event_match(matching_events)
+                merged_payload = merge_programata_event_payload(payload, matching_events)
+                canonical_event_id = int(canonical_event["id_event"])
+                response = client.table("events").update(merged_payload).eq("id_event", canonical_event_id).execute()
+
+                duplicate_event_ids = [int(row["id_event"]) for row in matching_events if int(row["id_event"]) != canonical_event_id]
+                if duplicate_event_ids:
+                    likes_response = client.table("event_likes").select("id_user").in_("id_event", duplicate_event_ids).execute()
+                    likes_rows = likes_response.data or []
+                    if likes_rows:
+                        transferred_likes = [
+                            {
+                                "id_user": int(row["id_user"]),
+                                "id_event": canonical_event_id,
+                            }
+                            for row in likes_rows
+                        ]
+                        client.table("event_likes").upsert(transferred_likes, on_conflict="id_user,id_event").execute()
+
+                    client.table("events").delete().in_("id_event", duplicate_event_ids).execute()
+
+                if existing_events is not None and response.data:
+                    sync_existing_event_cache(existing_events, duplicate_event_ids, response.data[0])
+
+                logger.info("Recovered duplicate insert as update for event %s: %s", canonical_event_id, event_value(event, "name_event"))
         else:
             canonical_event = choose_canonical_event_match(matching_events)
             merged_payload = merge_programata_event_payload(payload, matching_events)
