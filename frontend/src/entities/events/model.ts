@@ -255,6 +255,12 @@ const toggleEventLike = async ({ userId, eventId }: EventLikeMutation): Promise<
 };
 
 export const fetchEventsFx = createEffect(loadEventRows);
+export const fetchAllEventsFx = createEffect(async (): Promise<EventItem[]> => loadEventRows({
+  searchText: '',
+  regionId: null,
+  categoryId: null,
+  date: null,
+}));
 export const fetchEventByIdFx = createEffect(loadEventRowById);
 export const fetchLikedEventIdsFx = createEffect(loadLikedEventIds);
 export const toggleEventLikeFx = createEffect(toggleEventLike);

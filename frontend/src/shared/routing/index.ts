@@ -5,6 +5,8 @@ import { createBrowserHistory } from 'history';
 export const routes = {
   home: createRoute(),
   events: createRoute(),
+  recommended: createRoute(),
+  favorites: createRoute(),
   eventDetails: createRoute<{ id: string }>(),
   login: createRoute(),
 };
@@ -14,6 +16,8 @@ export const router = createHistoryRouter({
   routes: [
     { path: '/', route: routes.home },
     { path: '/events', route: routes.events },
+    { path: '/recommended', route: routes.recommended },
+    { path: '/favorites', route: routes.favorites },
     { path: '/events/:id', route: routes.eventDetails },
     { path: '/login', route: routes.login },
   ],

@@ -172,7 +172,7 @@ sample({
 
 sample({
   clock: loadUserProfileFx.doneData,
-  filter: (user: AppUser | null): user is AppUser => Boolean(user),
+  filter: (user: AppUser | null): user is AppUser => Boolean(user) && !isRecoveryRoute(),
   fn: () => undefined,
   target: goHome,
 });

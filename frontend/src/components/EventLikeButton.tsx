@@ -60,14 +60,23 @@ const EventLikeButton: React.FC<EventLikeButtonProps> = ({ eventId, compact = fa
 
   return (
     <Button
-      type={isLiked ? 'primary' : 'default'}
-      ghost={!isLiked}
+      className="event-like-button"
+      data-liked={isLiked ? 'true' : 'false'}
+      type="default"
       icon={isLiked ? <HeartFilled /> : <HeartOutlined />}
       onClick={handleClick}
       loading={isToggling}
       block={block}
       size={compact ? 'small' : 'middle'}
-      style={isLiked ? { background: 'var(--accent)', borderColor: 'var(--accent)' } : undefined}
+      style={{
+        minWidth: compact ? 118 : 138,
+        fontWeight: 700,
+        borderRadius: 12,
+        background: isLiked ? 'var(--accent)' : 'var(--surface-elevated)',
+        borderColor: 'var(--accent)',
+        color: isLiked ? '#ffffff' : 'var(--accent)',
+        boxShadow: isLiked ? '0 10px 24px rgba(24, 144, 255, 0.18)' : '0 8px 18px rgba(15, 23, 42, 0.06)',
+      }}
     >
       {isLiked ? 'Харесано' : 'Харесай'}
     </Button>

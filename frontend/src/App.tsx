@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Route, Link } from 'atomic-router-react';
 import { useUnit } from 'effector-react';
-import { Button, ConfigProvider, Layout, Menu, Tooltip, theme as antdTheme } from 'antd';
-import { BgColorsOutlined, CalendarOutlined, HomeOutlined, LoginOutlined, LogoutOutlined, MoonOutlined, SunOutlined } from '@ant-design/icons';
+import { Button, ConfigProvider, Grid, Layout, Menu, Tooltip, theme as antdTheme } from 'antd';
+import { BgColorsOutlined, CalendarOutlined, HeartOutlined, HomeOutlined, LoginOutlined, LogoutOutlined, MoonOutlined, StarOutlined, SunOutlined } from '@ant-design/icons';
 import { history, routes } from './shared/routing';
 import { $isAuthenticated, $user, signOutFx } from './entities/model';
 import UserUpgradePopover from './components/UserUpgradePopover';
@@ -11,9 +11,11 @@ import './theme.css';
 import Home from './pages/Home/index';
 import Events from './pages/Events/index';
 import EventDetails from './pages/EventDetails/index';
+import Favorites from './pages/Favorites/index';
 import Login from './pages/Login/index';
+import Recommended from './pages/Recommended/index';
 
-const { Header, Content, Footer } = Layout;
+const { Header, Sider, Content, Footer } = Layout;
 
 type ThemeMode = 'light' | 'dark' | 'orange';
 
@@ -22,8 +24,48 @@ const themeOrder: ThemeMode[] = ['light', 'dark', 'orange'];
 const getRouteKey = (pathname: string) => {
   if (pathname === '/') return 'home';
   if (pathname.startsWith('/events')) return 'events';
+  if (pathname === '/recommended') return 'recommended';
+  if (pathname === '/favorites') return 'favorites';
   if (pathname === '/login') return 'login';
   return 'home';
+};
+
+const navigationItems = [
+  {
+    key: 'home',
+    icon: <HomeOutlined />,
+    label: <Link to={routes.home}>Начало</Link>,
+  },
+  {
+    key: 'events',
+    icon: <CalendarOutlined />,
+    label: <Link to={routes.events}>Всички събития</Link>,
+  },
+  {
+    key: 'recommended',
+    icon: <StarOutlined />,
+    label: <Link to={routes.recommended}>Препоръчано за теб</Link>,
+  },
+  {
+    key: 'favorites',
+    icon: <HeartOutlined />,
+    label: <Link to={routes.favorites}>Любими</Link>,
+  },
+];
+
+const SidebarNavigation: React.FC<{ themeMode: ThemeMode; selectedKey: string; compact?: boolean }> = ({ themeMode, selectedKey, compact = false }) => {
+  const menuTheme = themeMode === 'dark' ? 'dark' : 'light';
+
+  return (
+    <Menu
+      className={compact ? 'app-navigation app-navigation-compact' : 'app-navigation'}
+      theme={menuTheme}
+      mode={compact ? 'horizontal' : 'inline'}
+      selectedKeys={[selectedKey]}
+      style={compact ? { width: '100%', borderBottom: 'none', background: 'transparent' } : { borderRight: 'none', background: 'transparent' }}
+      items={navigationItems}
+    />
+  );
 };
 
 const getThemeConfig = (mode: ThemeMode) => {
@@ -57,8 +99,25 @@ const getThemeConfig = (mode: ThemeMode) => {
   };
 };
 
-const AppMenu: React.FC<{ themeMode: ThemeMode }> = ({ themeMode }) => {
+const App: React.FC = () => {
+  const screens = Grid.useBreakpoint();
+  const showSidebar = screens.lg ?? false;
+  const [themeMode, setThemeMode] = useState<ThemeMode>('light');
   const [selectedKey, setSelectedKey] = useState(() => getRouteKey(typeof window !== 'undefined' ? window.location.pathname : '/'));
+  const { isAuthenticated, signOut, user } = useUnit({
+    isAuthenticated: $isAuthenticated,
+    user: $user,
+    signOut: signOutFx,
+  });
+
+  const themeConfig = useMemo(() => getThemeConfig(themeMode), [themeMode]);
+  const cycleTheme = () => {
+    const nextIndex = (themeOrder.indexOf(themeMode) + 1) % themeOrder.length;
+    setThemeMode(themeOrder[nextIndex]);
+  };
+
+  const themeIcon = themeMode === 'light' ? <MoonOutlined /> : themeMode === 'dark' ? <BgColorsOutlined /> : <SunOutlined />;
+  const themeTooltip = themeMode === 'light' ? 'Тъмна тема' : themeMode === 'dark' ? 'Оранжева тема' : 'Светла тема';
 
   useEffect(() => {
     const unlisten = history.listen(({ location }) => {
@@ -69,48 +128,6 @@ const AppMenu: React.FC<{ themeMode: ThemeMode }> = ({ themeMode }) => {
       unlisten();
     };
   }, []);
-
-  const items = [
-    {
-      key: 'home',
-      icon: <HomeOutlined />,
-      label: <Link to={routes.home}>Начало</Link>,
-    },
-    {
-      key: 'events',
-      icon: <CalendarOutlined />,
-      label: <Link to={routes.events}>Събития</Link>,
-    },
-  ];
-
-  return (
-    <Menu  
-      theme={themeMode === 'orange' ? 'light' : 'dark'}
-      mode="horizontal"
-      selectedKeys={[selectedKey]}
-      style={{ flex: 1, minWidth: 0, borderBottom: 'none', background: 'transparent' }}
-      items={items}
-    />
-  );
-};
-
-const App: React.FC = () => {
-  const [themeMode, setThemeMode] = useState<ThemeMode>('light');
-  const { isAuthenticated, signOut, user } = useUnit({
-    isAuthenticated: $isAuthenticated,
-    user: $user,
-    signOut: signOutFx,
-  });
-
-  const themeConfig = useMemo(() => getThemeConfig(themeMode), [themeMode]);
-
-  const cycleTheme = () => {
-    const nextIndex = (themeOrder.indexOf(themeMode) + 1) % themeOrder.length;
-    setThemeMode(themeOrder[nextIndex]);
-  };
-
-  const themeIcon = themeMode === 'light' ? <MoonOutlined /> : themeMode === 'dark' ? <BgColorsOutlined /> : <SunOutlined />;
-  const themeTooltip = themeMode === 'light' ? 'Тъмна тема' : themeMode === 'dark' ? 'Оранжева тема' : 'Светла тема';
 
   return (
     <ConfigProvider theme={themeConfig}>
@@ -144,7 +161,7 @@ const App: React.FC = () => {
             </span>
           </div>
 
-          <AppMenu themeMode={themeMode} />
+          <div style={{ flex: 1 }} />
 
           {isAuthenticated && user && <UserUpgradePopover user={user} />}
 
@@ -202,14 +219,46 @@ const App: React.FC = () => {
           </Tooltip>
         </Header>
 
-        <Content style={{ padding: '0', position: 'relative', zIndex: 1 }}>
-          <div style={{ minHeight: 'calc(100vh - 134px)' }}>
-            <Route route={routes.home} view={Home} />
-            <Route route={routes.events} view={Events} />
-            <Route route={routes.eventDetails} view={EventDetails} />
-            <Route route={routes.login} view={Login} />
-          </div>
-        </Content>
+        <Layout style={{ minHeight: 'calc(100vh - 134px)', background: 'transparent', position: 'relative', zIndex: 1 }}>
+          {showSidebar ? (
+            <Sider
+              width={288}
+              theme={themeMode === 'dark' ? 'dark' : 'light'}
+              style={{
+                background: 'var(--surface-bg)',
+                borderRight: '1px solid var(--border-color)',
+                boxShadow: 'var(--shadow-soft)',
+                position: 'sticky',
+                top: 64,
+                alignSelf: 'flex-start',
+                height: 'calc(100vh - 134px)',
+                overflow: 'auto',
+              }}
+            >
+              <div style={{ padding: '24px 20px 12px', color: 'var(--text-primary)', fontWeight: 800, letterSpacing: '0.4px' }}>
+                Навигация
+              </div>
+              <SidebarNavigation themeMode={themeMode} selectedKey={selectedKey} />
+            </Sider>
+          ) : null}
+
+          <Content style={{ padding: showSidebar ? '24px 24px 24px 0' : '24px', position: 'relative', zIndex: 1 }}>
+            {!showSidebar ? (
+              <div style={{ marginBottom: '20px', padding: '12px 16px', background: 'var(--surface-bg)', border: '1px solid var(--border-color)', borderRadius: '16px', boxShadow: 'var(--shadow-soft)' }}>
+                <SidebarNavigation themeMode={themeMode} selectedKey={selectedKey} compact />
+              </div>
+            ) : null}
+
+            <div style={{ minHeight: 'calc(100vh - 198px)' }}>
+              <Route route={routes.home} view={Home} />
+              <Route route={routes.events} view={Events} />
+              <Route route={routes.recommended} view={Recommended} />
+              <Route route={routes.favorites} view={Favorites} />
+              <Route route={routes.eventDetails} view={EventDetails} />
+              <Route route={routes.login} view={Login} />
+            </div>
+          </Content>
+        </Layout>
 
         <Footer
           style={{

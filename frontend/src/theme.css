@@ -18,6 +18,10 @@
   --toggle-bg: rgba(255, 255, 255, 0.12);
   --toggle-fg: #ffffff;
   --toggle-border: rgba(255, 255, 255, 0.18);
+  --nav-hover-bg: rgba(24, 144, 255, 0.08);
+  --nav-active-bg: rgba(24, 144, 255, 0.14);
+  --nav-active-border: rgba(24, 144, 255, 0.34);
+  --nav-active-text: #0f6bdc;
 }
 
 .layout[data-theme='dark'] {
@@ -40,6 +44,10 @@
   --toggle-bg: rgba(255, 255, 255, 0.12);
   --toggle-fg: #ffffff;
   --toggle-border: rgba(255, 255, 255, 0.18);
+  --nav-hover-bg: rgba(90, 167, 255, 0.12);
+  --nav-active-bg: rgba(90, 167, 255, 0.18);
+  --nav-active-border: rgba(90, 167, 255, 0.34);
+  --nav-active-text: #d8ecff;
 }
 
 .layout[data-theme='orange'] {
@@ -62,4 +70,87 @@
   --toggle-bg: #fff3e8;
   --toggle-fg: #c65a00;
   --toggle-border: #f0d2b3;
+  --nav-hover-bg: rgba(198, 90, 0, 0.08);
+  --nav-active-bg: rgba(198, 90, 0, 0.14);
+  --nav-active-border: rgba(198, 90, 0, 0.28);
+  --nav-active-text: #c65a00;
+}
+
+.layout .app-navigation .ant-menu-item {
+  height: 48px;
+  line-height: 48px;
+  margin: 8px 12px !important;
+  border-radius: 14px !important;
+  color: var(--text-secondary) !important;
+  transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.layout .app-navigation.app-navigation-compact .ant-menu-item {
+  margin: 0 6px !important;
+  height: 42px;
+  line-height: 42px;
+}
+
+.layout .app-navigation .ant-menu-item:hover {
+  background: var(--nav-hover-bg) !important;
+  color: var(--text-primary) !important;
+}
+
+.layout .app-navigation .ant-menu-item-selected {
+  background: var(--nav-active-bg) !important;
+  color: var(--nav-active-text) !important;
+  border: 1px solid var(--nav-active-border);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+  transform: translateX(2px);
+  font-weight: 700;
+}
+
+.layout .app-navigation .ant-menu-item-selected::after {
+  border-right-width: 0 !important;
+}
+
+.layout .app-navigation .ant-menu-item a {
+  color: inherit;
+}
+
+.layout .event-like-button {
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease, color 0.18s ease, border-color 0.18s ease, filter 0.18s ease;
+}
+
+.layout .event-like-button:hover,
+.layout .event-like-button:focus-visible {
+  transform: translateY(-1px);
+  border-color: var(--accent) !important;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.14);
+}
+
+.layout .event-like-button[data-liked='false'] {
+  background: var(--surface-elevated) !important;
+  color: var(--accent) !important;
+}
+
+.layout .event-like-button[data-liked='false']:hover,
+.layout .event-like-button[data-liked='false']:focus-visible {
+  background: rgba(24, 144, 255, 0.08) !important;
+  color: var(--accent) !important;
+}
+
+.layout .event-like-button[data-liked='true'] {
+  background: var(--accent) !important;
+  color: #ffffff !important;
+}
+
+.layout .event-like-button[data-liked='true']:hover,
+.layout .event-like-button[data-liked='true']:focus-visible {
+  background: color-mix(in srgb, var(--accent) 88%, #000 12%) !important;
+  color: #ffffff !important;
+}
+
+.layout .event-like-button .ant-btn-icon {
+  transition: transform 0.18s ease;
+}
+
+.layout .event-like-button:hover .ant-btn-icon,
+.layout .event-like-button:focus-visible .ant-btn-icon {
+  transform: scale(1.08);
 }
