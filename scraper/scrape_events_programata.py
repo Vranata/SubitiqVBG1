@@ -118,6 +118,8 @@ EVENT_PAYLOAD_KEYS = [
     "description",
 ]
 
+SOURCE_IDENTITY_COLUMNS_AVAILABLE: bool | None = None
+
 SCHEDULE_LINE_RE = re.compile(
     r"^(?P<start_day>\d{1,2})(?:\s*[-–]\s*(?P<end_day>\d{1,2}))?\s+(?P<month>[А-Яа-я]+)(?:\s+(?P<year>\d{4}))?(?:\s*,\s*(?P<time>\d{1,2}:\d{2})(?:\s*ч\.?))?(?:\s*,\s*(?P<place>.+))?$",
     re.IGNORECASE,
@@ -457,23 +459,31 @@ def load_lookup_maps(client: Client) -> tuple[dict[str, int], dict[str, int]]:
 
 
 def load_existing_programata_events(client: Client) -> list[dict[str, Any]]:
+    global SOURCE_IDENTITY_COLUMNS_AVAILABLE
+
     try:
         response = (
             client.table("events")
             .select("id_event, source_name, source_event_key, source_url, name_event, name_artist, place_event, id_event_category, id_user, id_region, start_date, start_hour, end_date, end_hour, description, picture")
             .execute()
         )
+        SOURCE_IDENTITY_COLUMNS_AVAILABLE = True
         return response.data or []
     except Exception as exc:
         if not is_missing_source_identity_column_error(exc):
             raise
 
+    SOURCE_IDENTITY_COLUMNS_AVAILABLE = False
     response = (
         client.table("events")
         .select("id_event, name_event, name_artist, place_event, id_event_category, id_user, id_region, start_date, start_hour, end_date, end_hour, description, picture")
         .execute()
     )
     return response.data or []
+
+
+def source_identity_columns_supported() -> bool:
+    return SOURCE_IDENTITY_COLUMNS_AVAILABLE is not False
 
 
 def apply_programata_source_identity(event_dict: dict[str, Any], source_key: str) -> dict[str, Any]:
@@ -1874,6 +1884,8 @@ def upsert_event(
 ) -> dict[str, Any]:
     payload = build_event_payload(event)
     fallback_payload = strip_source_identity_fields(payload)
+    if not source_identity_columns_supported():
+        payload = fallback_payload
     matching_events = find_existing_event_matches(client, event, existing_events)
 
     try:
@@ -1900,10 +1912,20 @@ def upsert_event(
 
                 canonical_event = choose_canonical_event_match(matching_events)
                 merged_payload = merge_programata_event_payload(payload, matching_events)
+                if not source_identity_columns_supported():
+                    merged_payload = strip_source_identity_fields(merged_payload)
                 canonical_event_id = int(canonical_event["id_event"])
-                response = client.table("events").update(merged_payload).eq("id_event", canonical_event_id).execute()
-                if response.data is None and is_missing_source_identity_column_error(insert_exc):
-                    response = client.table("events").update(strip_source_identity_fields(merged_payload)).eq("id_event", canonical_event_id).execute()
+                try:
+                    response = client.table("events").update(merged_payload).eq("id_event", canonical_event_id).execute()
+                except Exception as update_exc:
+                    if not is_missing_source_identity_column_error(update_exc):
+                        raise
+                    response = (
+                        client.table("events")
+                        .update(strip_source_identity_fields(merged_payload))
+                        .eq("id_event", canonical_event_id)
+                        .execute()
+                    )
 
                 duplicate_event_ids = [int(row["id_event"]) for row in matching_events if int(row["id_event"]) != canonical_event_id]
                 if duplicate_event_ids:
