@@ -1565,8 +1565,21 @@ def is_placeholder_time(value: Any) -> bool:
 def programata_events_share_identity(left: dict[str, Any], right: dict[str, Any]) -> bool:
     return all(
         normalize_programata_identity_text(event_value(left, key)) == normalize_programata_identity_text(event_value(right, key))
-        for key in ("name_event", "name_artist", "id_event_category", "id_user", "id_region")
+        for key in ("name_event", "name_artist", "id_event_category", "id_user")
     )
+
+
+def programata_events_region_compatible(left: dict[str, Any], right: dict[str, Any]) -> bool:
+    left_region = normalize_event_text(event_value(left, "id_region"))
+    right_region = normalize_event_text(event_value(right, "id_region"))
+
+    if not left_region or not right_region:
+        return True
+
+    if left_region == right_region:
+        return True
+
+    return left_region == "0" or right_region == "0"
 
 
 def programata_events_place_compatible(left: dict[str, Any], right: dict[str, Any]) -> bool:
@@ -1615,6 +1628,7 @@ def programata_events_time_compatible(left: dict[str, Any], right: dict[str, Any
 def programata_events_can_merge(left: dict[str, Any], right: dict[str, Any]) -> bool:
     return (
         programata_events_share_identity(left, right)
+        and programata_events_region_compatible(left, right)
         and programata_events_place_compatible(left, right)
         and programata_events_overlap(left, right)
         and programata_events_time_compatible(left, right)
