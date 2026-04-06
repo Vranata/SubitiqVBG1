@@ -22,6 +22,8 @@ from bs4 import BeautifulSoup, Tag
 from requests import RequestException
 from supabase import Client, create_client
 
+from shared_source import SOURCE_IDENTITY_FIELDS, stamp_source_identity
+
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -455,19 +457,27 @@ def load_lookup_maps(client: Client) -> tuple[dict[str, int], dict[str, int]]:
 
 
 def load_existing_programata_events(client: Client) -> list[dict[str, Any]]:
+    try:
+        response = (
+            client.table("events")
+            .select("id_event, source_name, source_event_key, source_url, name_event, name_artist, place_event, id_event_category, id_user, id_region, start_date, start_hour, end_date, end_hour, description, picture")
+            .execute()
+        )
+        return response.data or []
+    except Exception as exc:
+        if not is_missing_source_identity_column_error(exc):
+            raise
+
     response = (
         client.table("events")
-        .select("id_event, source_name, source_event_key, source_url, name_event, name_artist, place_event, id_event_category, id_user, id_region, start_date, start_hour, end_date, end_hour, description, picture")
+        .select("id_event, name_event, name_artist, place_event, id_event_category, id_user, id_region, start_date, start_hour, end_date, end_hour, description, picture")
         .execute()
     )
     return response.data or []
 
 
 def apply_programata_source_identity(event_dict: dict[str, Any], source_key: str) -> dict[str, Any]:
-    event_dict["source_name"] = PROGRAMATA_SOURCE_NAME
-    event_dict["source_event_key"] = clean_text(source_key)
-    event_dict["source_url"] = clean_text(event_dict.get("source_url") or source_key)
-    return event_dict
+    return stamp_source_identity(event_dict, PROGRAMATA_SOURCE_NAME, source_key, event_dict.get("source_url"))
 
 
 def first_match_text(root: Tag | BeautifulSoup, selectors: list[str], attribute: str | None = None) -> str:
@@ -1689,6 +1699,10 @@ def build_event_payload(event: dict[str, Any]) -> dict[str, Any]:
     return {key: event_value(event, key) for key in EVENT_PAYLOAD_KEYS}
 
 
+def strip_source_identity_fields(payload: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in payload.items() if key not in SOURCE_IDENTITY_FIELDS}
+
+
 def resolve_default_user_id(client: Client, explicit_user_id: int | None) -> int:
     if explicit_user_id is not None:
         return explicit_user_id
@@ -1840,12 +1854,26 @@ def is_duplicate_key_violation(exc: Exception) -> bool:
     return "duplicate key value violates unique constraint" in message or "unique constraint" in message and "duplicate" in message
 
 
+def is_missing_source_identity_column_error(exc: Exception) -> bool:
+    message = str(exc).casefold()
+    return any(
+        field in message
+        and (
+            "does not exist" in message
+            or "could not find the" in message
+            or "pgrst204" in message
+        )
+        for field in SOURCE_IDENTITY_FIELDS
+    )
+
+
 def upsert_event(
     client: Client,
     event: dict[str, Any],
     existing_events: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     payload = build_event_payload(event)
+    fallback_payload = strip_source_identity_fields(payload)
     matching_events = find_existing_event_matches(client, event, existing_events)
 
     try:
@@ -1856,6 +1884,13 @@ def upsert_event(
                 if existing_events is not None and response.data:
                     sync_existing_event_cache(existing_events, [], response.data[0])
             except Exception as insert_exc:
+                if is_missing_source_identity_column_error(insert_exc):
+                    response = client.table("events").insert(fallback_payload).execute()
+                    logger.info("Inserted event without source identity columns: %s", event_value(event, "name_event"))
+                    if existing_events is not None and response.data:
+                        sync_existing_event_cache(existing_events, [], response.data[0])
+                    return response.data[0] if response.data else fallback_payload
+
                 if not is_duplicate_key_violation(insert_exc):
                     raise
 
@@ -1867,6 +1902,8 @@ def upsert_event(
                 merged_payload = merge_programata_event_payload(payload, matching_events)
                 canonical_event_id = int(canonical_event["id_event"])
                 response = client.table("events").update(merged_payload).eq("id_event", canonical_event_id).execute()
+                if response.data is None and is_missing_source_identity_column_error(insert_exc):
+                    response = client.table("events").update(strip_source_identity_fields(merged_payload)).eq("id_event", canonical_event_id).execute()
 
                 duplicate_event_ids = [int(row["id_event"]) for row in matching_events if int(row["id_event"]) != canonical_event_id]
                 if duplicate_event_ids:
