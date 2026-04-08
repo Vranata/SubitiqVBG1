@@ -240,6 +240,44 @@ def canonicalize_url(value: str) -> str:
     return urlunsplit((parsed_value.scheme, parsed_value.netloc, parsed_value.path, "", ""))
 
 
+def extract_allevents_image_url(root: Tag | BeautifulSoup, base_url: str | None = None) -> str:
+    candidate_values: list[str] = []
+
+    banner_element = root.select_one("div.banner-cont")
+    if banner_element is not None:
+        for attribute_name in ("data-src", "data-lazy-src", "data-original", "src"):
+            candidate_values.append(clean_text(banner_element.get(attribute_name)))
+
+        banner_image = banner_element.select_one("img")
+        if banner_image is not None:
+            for attribute_name in ("src", "data-src", "data-lazy-src", "data-original"):
+                candidate_values.append(clean_text(banner_image.get(attribute_name)))
+
+            srcset_value = clean_text(banner_image.get("srcset"))
+            if srcset_value:
+                candidate_values.append(srcset_value.split()[0])
+
+        style_value = clean_text(banner_element.get("style"))
+        if style_value:
+            style_match = re.search(r"background-image:\s*url\((['\"]?)(.*?)\1\)", style_value, flags=re.IGNORECASE)
+            if style_match is not None:
+                candidate_values.append(style_match.group(2))
+
+    image_element = root.select_one(ALLEVENTS_IMAGE_SELECTOR)
+    if image_element is not None:
+        for attribute_name in ("src", "data-src", "data-lazy-src", "data-original"):
+            candidate_values.append(clean_text(image_element.get(attribute_name)))
+
+    for raw_value in candidate_values:
+        if not raw_value:
+            continue
+        if raw_value.startswith("data:"):
+            continue
+        return urljoin(base_url or "", raw_value)
+
+    return ""
+
+
 def extract_card_href(card: Tag, base_url: str | None = None) -> str:
     link_element = card.select_one(ALLEVENTS_TITLE_SELECTOR)
     if link_element is None:
@@ -251,13 +289,7 @@ def extract_card_href(card: Tag, base_url: str | None = None) -> str:
 
 
 def extract_card_image(card: Tag, base_url: str | None = None) -> str:
-    image_element = card.select_one(ALLEVENTS_IMAGE_SELECTOR)
-    if image_element is None:
-        return ""
-    src = clean_text(image_element.get("src"))
-    if not src:
-        return ""
-    return urljoin(base_url or "", src)
+    return extract_allevents_image_url(card, base_url)
 
 
 def extract_section_title(card: Tag) -> str:
@@ -315,6 +347,7 @@ def parse_allevents_time(raw_time: str | None) -> str:
 
 def parse_allevents_date_text(raw_value: str, year_hint: int | None = None) -> dict[str, str]:
     cleaned_value = clean_text(raw_value).replace("•", " ")
+    cleaned_value = re.sub(r"\s*\([A-Z]{2,5}\)$", "", cleaned_value)
     if not cleaned_value:
         raise ValueError("Missing Allevents schedule value")
 
@@ -565,9 +598,12 @@ def build_allevents_event(
     default_user_id: int | None,
     detail_url: str,
     source_page_url: str | None,
+    page_region_id: int | None = None,
     picture: str | None = None,
 ) -> dict[str, Any] | None:
     region_id = resolve_allevents_region_id(region_lookup, section_title, title_text, location_text, detail_url, source_page_url)
+    if region_id is None:
+        region_id = page_region_id
     if region_id is None:
         return None
 
@@ -595,6 +631,7 @@ def parse_homepage_event_card(
     category_lookup: dict[str, int],
     default_user_id: int | None,
     source_url: str | None = None,
+    page_region_id: int | None = None,
 ) -> dict[str, Any] | None:
     detail_url = extract_card_href(card, source_url)
     if not detail_url:
@@ -629,6 +666,7 @@ def parse_homepage_event_card(
         default_user_id,
         detail_url,
         source_url,
+        page_region_id=page_region_id,
         picture=picture_value,
     )
 
@@ -639,6 +677,7 @@ def parse_recently_added_item(
     category_lookup: dict[str, int],
     default_user_id: int | None,
     source_url: str | None = None,
+    page_region_id: int | None = None,
 ) -> dict[str, Any] | None:
     title_anchor = item.select_one("div.meta-right div.title a[href]")
     if title_anchor is None:
@@ -680,7 +719,69 @@ def parse_recently_added_item(
         default_user_id,
         detail_url,
         source_url,
+        page_region_id=page_region_id,
         picture=picture_value,
+    )
+
+
+def parse_allevents_detail_page(
+    detail_html: str,
+    detail_url: str,
+    region_lookup: dict[str, int],
+    category_lookup: dict[str, int],
+    default_user_id: int | None,
+    source_page_url: str | None,
+    page_region_id: int | None,
+    title_hint: str | None = None,
+) -> dict[str, Any] | None:
+    soup = BeautifulSoup(detail_html, "html.parser")
+
+    title_value = clean_text(
+        (soup.select_one('meta[property="og:title"]') or soup.select_one("h1")).get("content")
+        if soup.select_one('meta[property="og:title"]') is not None
+        else (soup.select_one("h1").get_text(" ", strip=True) if soup.select_one("h1") is not None else "")
+    )
+    if not title_value:
+        title_value = clean_text(title_hint)
+    if not title_value:
+        return None
+
+    date_section = soup.select_one("div.datetime-location-section")
+    if date_section is None:
+        return None
+
+    time_value = clean_text(date_section.select_one("p.event-time-label").get_text(" ", strip=True) if date_section.select_one("p.event-time-label") is not None else "")
+    if not time_value:
+        return None
+
+    venue_elements = date_section.select("p.event-location")
+    venue_name = clean_text(venue_elements[0].get_text(" ", strip=True)) if venue_elements else ""
+    venue_address = clean_text(venue_elements[1].get_text(" ", strip=True)) if len(venue_elements) > 1 else ""
+    location_text = clean_text(" | ".join(part for part in [venue_name, venue_address] if part))
+
+    image_value = clean_text(
+        (soup.select_one('meta[property="og:image"]') or soup.select_one('meta[name="twitter:image"]')).get("content")
+        if soup.select_one('meta[property="og:image"]') is not None or soup.select_one('meta[name="twitter:image"]') is not None
+        else ""
+    )
+
+    try:
+        schedule = parse_allevents_date_text(time_value)
+    except ValueError:
+        return None
+
+    return build_allevents_event(
+        title_value,
+        location_text,
+        "",
+        schedule,
+        category_lookup,
+        region_lookup,
+        default_user_id,
+        detail_url,
+        source_page_url,
+        page_region_id=page_region_id,
+        picture=image_value,
     )
 
 
@@ -710,13 +811,14 @@ def parse_events(
     seen_keys: set[str] = set()
     source_page_city_slug = extract_page_city_slug(source_url)
     page_region_id = resolve_allevents_page_region_id(region_lookup, source_url)
+    seen_detail_urls: set[str] = set()
 
     for index, card in enumerate(soup.select(ALLEVENTS_CARD_SELECTOR), start=1):
         if not isinstance(card, Tag):
             continue
 
         try:
-            event = parse_homepage_event_card(card, region_lookup, category_lookup, default_user_id, source_url)
+            event = parse_homepage_event_card(card, region_lookup, category_lookup, default_user_id, source_url, page_region_id)
         except Exception as exc:
             logger.debug("Skipping Allevents card %s: %s", index, exc)
             continue
@@ -735,9 +837,6 @@ def parse_events(
             if event_city_slug and event_city_slug != source_page_city_slug:
                 continue
 
-        if page_region_id is not None and event.get("id_region") != page_region_id:
-            continue
-
         event_key = clean_text(event.get("source_url") or event.get("name_event") or "")
         if event_key in seen_keys:
             continue
@@ -745,12 +844,68 @@ def parse_events(
         seen_keys.add(event_key)
         records.append(event)
 
+    for container in soup.select('div.footer-links-cont'):
+        heading_element = container.select_one('h3.footer-head-title')
+        heading_text = clean_text(heading_element.get_text(' ', strip=True) if heading_element is not None else '')
+        if not heading_text.casefold().startswith('upcoming events in '):
+            continue
+
+        for index, item in enumerate(container.select('ul.footer-links > li'), start=1):
+            if not isinstance(item, Tag):
+                continue
+
+            title_anchor = item.select_one('a[href]')
+            if title_anchor is None:
+                continue
+
+            detail_url = canonicalize_url(urljoin(source_url or '', clean_text(title_anchor.get('href'))))
+            if not detail_url or detail_url in seen_detail_urls:
+                continue
+            seen_detail_urls.add(detail_url)
+
+            try:
+                detail_html = fetch_html(detail_url)
+                event = parse_allevents_detail_page(
+                    detail_html,
+                    detail_url,
+                    region_lookup,
+                    category_lookup,
+                    default_user_id,
+                    source_url,
+                    page_region_id,
+                    title_hint=clean_text(title_anchor.get_text(' ', strip=True)),
+                )
+            except Exception as exc:
+                logger.debug('Skipping upcoming footer item %s: %s', index, exc)
+                continue
+
+            if event is None:
+                continue
+
+            if is_event_in_past(event):
+                continue
+
+            if is_ignored_allevents_section(clean_text(event.get('section_title'))):
+                continue
+
+            if source_page_city_slug:
+                event_city_slug = extract_page_city_slug(event.get('source_url'))
+                if event_city_slug and event_city_slug != source_page_city_slug:
+                    continue
+
+            event_key = clean_text(event.get('source_url') or event.get('name_event') or '')
+            if event_key in seen_keys:
+                continue
+
+            seen_keys.add(event_key)
+            records.append(event)
+
     for index, item in enumerate(soup.select(ALLEVENTS_RECENT_ITEM_SELECTOR), start=1):
         if not isinstance(item, Tag):
             continue
 
         try:
-            event = parse_recently_added_item(item, region_lookup, category_lookup, default_user_id, source_url)
+            event = parse_recently_added_item(item, region_lookup, category_lookup, default_user_id, source_url, page_region_id)
         except Exception as exc:
             logger.debug("Skipping recently-added item %s: %s", index, exc)
             continue
@@ -768,9 +923,6 @@ def parse_events(
             event_city_slug = extract_page_city_slug(event.get("source_url"))
             if event_city_slug and event_city_slug != source_page_city_slug:
                 continue
-
-        if page_region_id is not None and event.get("id_region") != page_region_id:
-            continue
 
         event_key = clean_text(event.get("source_url") or event.get("name_event") or "")
         if event_key in seen_keys:
