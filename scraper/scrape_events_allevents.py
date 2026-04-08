@@ -8,6 +8,7 @@ through the shared Supabase upsert flow.
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import re
@@ -148,6 +149,7 @@ ALLEVENTS_TOMORROW_RE = re.compile(
     re.IGNORECASE,
 )
 ALLEVENTS_ONGOING_RE = re.compile(r"^Ongoing$", re.IGNORECASE)
+ALLEVENTS_CITYHOME_EVENTS_RE = re.compile(r"popevent_for_all_tab\s*=\s*(\[.*?\]);", re.DOTALL)
 ALLEVENTS_TITLE_SUFFIX_PATTERNS = [
     re.compile(r"\s*(?:\|+|,|[-–/]|[@*]+)\s*\d{1,2}\.\d{1,2}\.\d{2,4}$", re.IGNORECASE),
     re.compile(r"\s*(?:\|+|,|[-–/]|[@*]+)\s*\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4}$", re.IGNORECASE),
@@ -445,8 +447,8 @@ def contains_any(text: str, keywords: tuple[str, ...]) -> bool:
     return any(keyword in lowered_text for keyword in keywords)
 
 
-def infer_allevents_category_name(section_title: str, title: str, location_text: str) -> str:
-    combined_text = " ".join(part for part in [section_title, title, location_text] if part)
+def infer_allevents_category_name(section_title: str, title: str, location_text: str, description_text: str = "") -> str:
+    combined_text = " ".join(part for part in [section_title, title, location_text, description_text] if part)
 
     if contains_any(combined_text, ALLEVENTS_SPORT_KEYWORDS):
         return "Спорт"
@@ -459,8 +461,14 @@ def infer_allevents_category_name(section_title: str, title: str, location_text:
     return ALLEVENTS_DEFAULT_CATEGORY_NAME
 
 
-def resolve_allevents_category_id(category_lookup: dict[str, int], section_title: str, title: str, location_text: str) -> int:
-    category_name = infer_allevents_category_name(section_title, title, location_text)
+def resolve_allevents_category_id(
+    category_lookup: dict[str, int],
+    section_title: str,
+    title: str,
+    location_text: str,
+    description_text: str = "",
+) -> int:
+    category_name = infer_allevents_category_name(section_title, title, location_text, description_text)
     try:
         return resolve_lookup_id(category_name, category_lookup, "event category")
     except ValueError:
@@ -572,17 +580,24 @@ def resolve_allevents_page_region_id(region_lookup: dict[str, int], source_page_
         return None
 
     region_name = ALLEVENTS_CITY_SLUG_TO_REGION_NAME.get(page_city_slug)
-    if not region_name:
-        return None
+    candidate_values = [value for value in [region_name, page_city_slug] if value]
 
-    try:
-        return resolve_lookup_id(region_name, region_lookup, "region")
-    except ValueError:
-        return None
+    alias_lookup = build_region_alias_lookup(region_lookup)
+    for candidate_value in candidate_values:
+        matched_region_id = resolve_region_id_from_text(candidate_value, alias_lookup)
+        if matched_region_id is not None:
+            return matched_region_id
+
+        try:
+            return resolve_lookup_id(candidate_value, region_lookup, "region")
+        except ValueError:
+            continue
+
+    return None
 
 
-def build_description(section_title: str, location_text: str, title: str) -> str:
-    description_value = clean_text(" | ".join(part for part in [section_title, location_text, title] if part))
+def build_description(section_title: str, location_text: str, title: str, description_hint: str = "") -> str:
+    description_value = clean_text(" | ".join(part for part in [description_hint, section_title, location_text, title] if part))
     if description_value:
         return description_value
     return clean_text(title) or ALLEVENTS_DEFAULT_AUTHOR
@@ -599,6 +614,7 @@ def build_allevents_event(
     detail_url: str,
     source_page_url: str | None,
     page_region_id: int | None = None,
+    description_hint: str = "",
     picture: str | None = None,
 ) -> dict[str, Any] | None:
     region_id = resolve_allevents_region_id(region_lookup, section_title, title_text, location_text, detail_url, source_page_url)
@@ -611,7 +627,7 @@ def build_allevents_event(
         "name_event": title_text,
         "name_artist": ALLEVENTS_DEFAULT_AUTHOR,
         "place_event": location_text,
-        "id_event_category": resolve_allevents_category_id(category_lookup, section_title, title_text, location_text),
+        "id_event_category": resolve_allevents_category_id(category_lookup, section_title, title_text, location_text, description_hint),
         "id_user": default_user_id if default_user_id is not None else 1,
         "id_region": region_id,
         "start_date": schedule["start_date"],
@@ -619,10 +635,93 @@ def build_allevents_event(
         "end_date": schedule["end_date"],
         "end_hour": schedule["end_hour"],
         "picture": clean_text(picture) or None,
-        "description": build_description(section_title, location_text, title_text),
+        "description": build_description(section_title, location_text, title_text, description_hint),
         "source_url": detail_url,
         "section_title": section_title,
     }
+
+
+def extract_allevents_cityhome_events(html: str) -> list[dict[str, Any]]:
+    match = ALLEVENTS_CITYHOME_EVENTS_RE.search(html)
+    if match is None:
+        return []
+
+    try:
+        parsed_events = json.loads(match.group(1))
+    except json.JSONDecodeError:
+        return []
+
+    if not isinstance(parsed_events, list):
+        return []
+
+    return [event for event in parsed_events if isinstance(event, dict)]
+
+
+def parse_cityhome_js_event(
+    item: dict[str, Any],
+    region_lookup: dict[str, int],
+    category_lookup: dict[str, int],
+    default_user_id: int | None,
+    source_page_url: str | None,
+    page_region_id: int | None,
+) -> dict[str, Any] | None:
+    detail_url = canonicalize_url(clean_text(item.get("event_url") or item.get("share_url") or ""))
+    if not detail_url:
+        return None
+
+    title_text = strip_allevents_title_suffix(clean_text(item.get("eventname_raw") or item.get("eventname") or ""))
+    if not title_text:
+        return None
+
+    venue_value = item.get("venue") if isinstance(item.get("venue"), dict) else {}
+    venue_name = clean_text(item.get("location"))
+    venue_street = clean_text(venue_value.get("street") if isinstance(venue_value, dict) else "")
+    venue_full_address = clean_text(venue_value.get("full_address") if isinstance(venue_value, dict) else "")
+    location_text = clean_text(" | ".join(part for part in [venue_name, venue_street or venue_full_address] if part))
+
+    start_value = clean_text(item.get("start_time_display") or item.get("app_display_time") or item.get("display_time_label") or "")
+    end_value = clean_text(item.get("end_time_display") or "")
+    if not start_value:
+        return None
+
+    try:
+        schedule = parse_allevents_date_text(start_value.replace(" at ", " • "), date.today().year)
+    except ValueError:
+        return None
+
+    if end_value and end_value != start_value:
+        try:
+            end_schedule = parse_allevents_date_text(end_value.replace(" at ", " • "), date.today().year)
+            schedule["end_date"] = end_schedule["end_date"]
+            schedule["end_hour"] = end_schedule["end_hour"]
+        except ValueError:
+            pass
+
+    description_hint = clean_text(item.get("short_description"))
+    picture_value = clean_text(item.get("banner_url") or item.get("thumb_url_large") or item.get("thumb_url") or "")
+
+    event = build_allevents_event(
+        title_text,
+        location_text,
+        "",
+        schedule,
+        category_lookup,
+        region_lookup,
+        default_user_id,
+        detail_url,
+        source_page_url,
+        page_region_id=page_region_id,
+        description_hint=description_hint,
+        picture=picture_value,
+    )
+    if event is None:
+        return None
+
+    source_event_key = clean_text(item.get("event_id") or detail_url)
+    if source_event_key:
+        event["source_event_key"] = source_event_key
+
+    return event
 
 
 def parse_homepage_event_card(
@@ -812,6 +911,26 @@ def parse_events(
     source_page_city_slug = extract_page_city_slug(source_url)
     page_region_id = resolve_allevents_page_region_id(region_lookup, source_url)
     seen_detail_urls: set[str] = set()
+
+    for index, item in enumerate(extract_allevents_cityhome_events(html), start=1):
+        try:
+            event = parse_cityhome_js_event(item, region_lookup, category_lookup, default_user_id, source_url, page_region_id)
+        except Exception as exc:
+            logger.debug("Skipping cityhome JS item %s: %s", index, exc)
+            continue
+
+        if event is None:
+            continue
+
+        if is_event_in_past(event):
+            continue
+
+        event_key = clean_text(event.get("source_event_key") or event.get("source_url") or event.get("name_event") or "")
+        if event_key in seen_keys:
+            continue
+
+        seen_keys.add(event_key)
+        records.append(event)
 
     for index, card in enumerate(soup.select(ALLEVENTS_CARD_SELECTOR), start=1):
         if not isinstance(card, Tag):
