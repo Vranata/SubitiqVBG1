@@ -64,7 +64,8 @@ create or replace function public.search_events(
   p_search_text text default null,
   p_region_id smallint default null,
   p_category_id smallint default null,
-  p_event_date date default null
+  p_event_date date default null,
+  p_is_free boolean default null
 )
 returns table (
   id_event bigint,
@@ -81,7 +82,10 @@ returns table (
   id_event_category smallint,
   id_user bigint,
   region text,
-  category text
+  category text,
+  is_free boolean,
+  price_info text,
+  ticket_url text
 )
 language sql
 stable
@@ -101,7 +105,10 @@ as $$
     e.id_event_category,
     e.id_user,
     r.region,
-    ec.name_event_category as category
+    ec.name_event_category as category,
+    e.is_free,
+    e.price_info,
+    e.ticket_url
   from public.events e
   join public.regions r on r.id_region = e.id_region
   join public.event_category ec on ec.id_event_category = e.id_event_category
@@ -117,6 +124,7 @@ as $$
     and (p_region_id is null or e.id_region = p_region_id)
     and (p_category_id is null or e.id_event_category = p_category_id)
     and (p_event_date is null or p_event_date between e.start_date and e.end_date)
+    and (p_is_free is null or e.is_free = p_is_free)
   order by e.start_date asc, e.start_hour asc, e.id_event asc;
 $$;
 
@@ -138,7 +146,10 @@ returns table (
   id_event_category smallint,
   id_user bigint,
   region text,
-  category text
+  category text,
+  is_free boolean,
+  price_info text,
+  ticket_url text
 )
 language sql
 stable
@@ -158,7 +169,10 @@ as $$
     e.id_event_category,
     e.id_user,
     r.region,
-    ec.name_event_category as category
+    ec.name_event_category as category,
+    e.is_free,
+    e.price_info,
+    e.ticket_url
   from public.events e
   join public.regions r on r.id_region = e.id_region
   join public.event_category ec on ec.id_event_category = e.id_event_category
@@ -230,6 +244,9 @@ create table if not exists public.events (
   end_hour time not null,
   picture text,
   description text not null,
+  is_free boolean not null default false,
+  price_info text,
+  ticket_url text,
   constraint events_start_not_past check ((start_date + start_hour) >= now()),
   constraint events_start_before_end check ((start_date + start_hour) <= (end_date + end_hour)),
   constraint events_duration_within_year check ((end_date + end_hour) <= (start_date + start_hour + interval '1 year')),
@@ -327,11 +344,22 @@ on conflict (id_region) do nothing;
 
 insert into public.event_category (id_event_category, name_event_category, description_event_category) values
   (10, 'Концерти', 'Музикални събития на живо с български и гостуващи изпълнители.'),
+  (11, 'Класическа музика', 'Оперни, балетни и симфонични концерти и класически рецитали.'),
+  (12, 'Клубна музика', 'DJs, партита, електронна музика и клубни изпълнения на живо.'),
+  (13, 'Рок и Метъл', 'Концерти и фестивали за любителите на тежката музика.'),
+  (14, 'Поп и Джаз', 'Популярна музика, джаз сесии и естрадни изпълнения.'),
   (20, 'Спорт', 'Спортни прояви, състезания и активности за любители и професионалисти.'),
   (30, 'Театър', 'Сценични представления, премиери и фестивали на драматичното изкуство.'),
+  (31, 'Детски спектакли', 'Театър, куклени постановки и шоу програми за деца.'),
   (40, 'Кино', 'Прожекции, премиери и специални кино събития за всички възрасти.'),
-  (50, 'Фестивали', 'Градски и регионални празници с култура, музика и храна.')
-on conflict (id_event_category) do nothing;
+  (50, 'Фестивали', 'Градски и регионални празници с култура, музика и храна.'),
+  (60, 'Изложби', 'Живопис, скулптура, фотография и съвременно визуално изкуство.'),
+  (70, 'Литература', 'Представяне на книги, поетични вечери и литературни четения.'),
+  (80, 'Семинари и Лекции', 'Образователни събития, дискусии и професионални обучения.'),
+  (90, 'Други', 'Специфични събития, които не попадат в останалите категории.')
+on conflict (id_event_category) do update set
+  name_event_category = excluded.name_event_category,
+  description_event_category = excluded.description_event_category;
 
 -- Official roles only, as defined in the project plan.
 insert into public.user_category (id_category, name_category, note_category_user) values
@@ -533,7 +561,10 @@ insert into public.events (
   end_date,
   end_hour,
   picture,
-  description
+  description,
+  is_free,
+  price_info,
+  ticket_url
 ) values
   (
     1,
@@ -548,7 +579,10 @@ insert into public.events (
     current_date + 14,
     time '22:30',
     'events/1_2.jpg',
-    'Рок концерт под открито небе с авторски парчета, гост-музиканти и любими класики за феновете на живата сцена.'
+    'Рок концерт под открито небе с авторски парчета, гост-музиканти и любими класики за феновете на живата сцена.',
+    false,
+    'От 25 лв.',
+    null
   ),
   (
     2,
@@ -563,7 +597,10 @@ insert into public.events (
     current_date + 21,
     time '13:00',
     'events/2_3.jpg',
-    'Градско спортно събитие за аматьори и професионалисти с различни дистанции, медали и морска атмосфера.'
+    'Градско спортно събитие за аматьори и професионалисти с различни дистанции, медали и морска атмосфера.',
+    true,
+    null,
+    null
   ),
   (
     3,
@@ -578,7 +615,10 @@ insert into public.events (
     current_date + 30,
     time '21:20',
     'events/3_4.jpg',
-    'Премиерен спектакъл с модерна драматургия, силна актьорска игра и специално сценично оформление за публиката.'
+    'Премиерен спектакъл с модерна драматургия, силна актьорска игра и специално сценично оформление за публиката.',
+    false,
+    'От 20 лв.',
+    'https://example.com/tickets/3'
   ),
   (
     4,
@@ -593,7 +633,10 @@ insert into public.events (
     current_date + 37,
     time '23:00',
     'events/4_5.jpg',
-    'Лятна прожекция на открито с удобни места, тематична атмосфера и подбрана програма от съвременно кино.'
+    'Лятна прожекция на открито с удобни места, тематична атмосфера и подбрана програма от съвременно кино.',
+    true,
+    null,
+    null
   ),
   (
     5,
@@ -608,7 +651,10 @@ insert into public.events (
     current_date + 47,
     time '20:00',
     'events/5_2.jpg',
-    'Тридневен градски фестивал с работилници, местни производители, сцена за музика и кулинарни щандове.'
+    'Тридневен градски фестивал с работилници, местни производители, сцена за музика и кулинарни щандове.',
+    true,
+    null,
+    null
   )
 on conflict (id_event) do nothing;
 

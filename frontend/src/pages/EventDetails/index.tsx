@@ -163,10 +163,11 @@ const EventDetails: React.FC = () => {
                 <Text style={{ display: 'block', color: 'var(--text-secondary)' }}>Край:</Text>
                 <Text strong style={{ fontSize: '1.1rem', color: 'var(--text-primary)' }}>{currentEvent.endDate} {currentEvent.endHour}</Text>
               </div>
+
               <EventLikeButton eventId={currentEvent.id} block />
               <Divider />
               <Button type="primary" block size="large">
-                Запиши се / Билети
+                Запази събитието
               </Button>
             </Space>
           </Card>

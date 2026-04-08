@@ -311,9 +311,9 @@ const Events: React.FC = () => {
         </div>
 
         <Row gutter={[16, 16]} align="middle">
-          <Col xs={24} md={6}>
+          <Col xs={24} md={12}>
             <Search
-              placeholder="Търси по име, изпълнител, място или описание..."
+              placeholder="Търси по име, изпълнител, вместо или описание..."
               allowClear
               enterButton={<SearchOutlined />}
               size="large"
@@ -322,7 +322,7 @@ const Events: React.FC = () => {
               onChange={(event) => onSearch(event.target.value)}
             />
           </Col>
-          <Col xs={24} md={6}>
+          <Col xs={24} md={3}>
             <FilterSelect
               placeholder="Регион"
               value={selectedRegionId}
@@ -331,7 +331,7 @@ const Events: React.FC = () => {
               options={regions}
             />
           </Col>
-          <Col xs={24} md={6}>
+          <Col xs={24} md={3}>
             <FilterSelect
               placeholder="Категория"
               value={selectedCategoryId}
@@ -340,14 +340,13 @@ const Events: React.FC = () => {
               options={categories}
             />
           </Col>
-          <Col xs={24} md={6}>
+          <Col xs={24} md={3}>
             <DatePicker
               placeholder="Дата"
               size="large"
               style={{ width: '100%' }}
-              allowClear
-              value={selectedDate ? dayjs(selectedDate, 'YYYY-MM-DD') : null}
-              onChange={(value) => onDateChange(value ? value.format('YYYY-MM-DD') : null)}
+              value={selectedDate ? dayjs(selectedDate) : null}
+              onChange={(date) => onDateChange(date ? date.format('YYYY-MM-DD') : null)}
             />
           </Col>
         </Row>
@@ -397,7 +396,6 @@ const Events: React.FC = () => {
                     <Link to={routes.eventDetails} params={{ id: event.id }}>
                       <Button type="default" icon={<ArrowRightOutlined />}>Виж повече</Button>
                     </Link>
-
                     <EventLikeButton eventId={event.id} compact />
 
                     {canManageEvent ? (

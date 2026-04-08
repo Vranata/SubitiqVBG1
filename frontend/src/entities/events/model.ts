@@ -148,6 +148,9 @@ const buildEventPayload = (values: EventMutationValues) => ({
   end_date: values.endDate,
   end_hour: values.endHour,
   picture: null,
+  is_free: false,
+  price_info: null,
+  ticket_url: null,
 });
 
 const normalizeFilters = (filters: EventFilters) => ({
