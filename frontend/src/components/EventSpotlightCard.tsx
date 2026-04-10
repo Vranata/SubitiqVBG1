@@ -16,6 +16,7 @@ type EventSpotlightCardProps = {
 const EventSpotlightCard: React.FC<EventSpotlightCardProps> = ({ event, reasonTags = [] }) => {
   return (
     <Card
+      className="event-spotlight-card"
       hoverable
       cover={
         <img

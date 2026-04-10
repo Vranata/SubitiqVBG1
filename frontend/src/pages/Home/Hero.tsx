@@ -1,43 +1,92 @@
 import React from 'react';
-import { Typography, Button, Space } from 'antd';
+import { Typography, Button } from 'antd';
 import { Link } from 'atomic-router-react';
-import { CalendarOutlined } from '@ant-design/icons';
+import { CalendarOutlined, ClockCircleOutlined, CompassOutlined, FireOutlined } from '@ant-design/icons';
 import { routes } from '../../shared/routing';
 
 const { Title, Paragraph } = Typography;
 
+const cities = ['София', 'Пловдив', 'Варна', 'Бургас', 'Русе', 'Габрово'];
+const themes = ['Концерти', 'Театър', 'Кино', 'Фестивали'];
+const featuredRows = [
+  { time: '18:30', label: 'Концерт', title: 'Една вечер с жива музика', city: 'София' },
+  { time: '20:00', label: 'Театър', title: 'Сцена с характер', city: 'Пловдив' },
+  { time: '21:15', label: 'Фестивал', title: 'Градски ритъм и прожекции', city: 'Габрово' },
+];
+
 const Hero: React.FC = () => {
   return (
-    <div
-      style={{
-        padding: '80px 24px',
-        textAlign: 'center',
-        background: 'var(--hero-bg)',
-        color: 'var(--hero-text)',
-        borderRadius: '20px',
-        marginBottom: '40px',
-        border: '1px solid var(--border-color)',
-        boxShadow: 'var(--shadow-soft)',
-      }}
-    >
-      <Title level={1} style={{ color: 'var(--hero-text)', fontSize: 'clamp(2rem, 5vw, 4rem)', marginBottom: '24px', fontWeight: 800 }}>
-        Открий най-добрите събития за теб
-      </Title>
-      <Paragraph style={{ color: 'var(--hero-text)', fontSize: 'clamp(1rem, 2.5vw, 1.5rem)', maxWidth: '800px', margin: '0 auto 40px' }}>
-        Платформа за персонализирано представяне и лесен достъп до културни, спортни и обществени мероприятия във вашия град.
-      </Paragraph>
-      <Space size="large">
-        <Link to={routes.events}>
-          <Button
-            type="primary"
-            size="large"
-            icon={<CalendarOutlined />}
-            style={{ height: '50px', padding: '0 40px', fontSize: '1.2rem', borderRadius: '25px', border: 'none', background: 'var(--hero-button-bg)', color: 'var(--hero-button-text)', boxShadow: '0 10px 28px rgba(0,0,0,0.12)', fontWeight: 700 }}
-          >
-            Към събитията
-          </Button>
-        </Link>
-      </Space>
+    <div className="home-hero">
+      <div className="home-hero-copy">
+        <div className="home-hero-kicker">CULTURO BG · ИЗБРАНО ДНЕС</div>
+        <Title level={1} className="home-hero-title">
+          Събития за твоя град, подредени като афиш.
+        </Title>
+        <Paragraph className="home-hero-text">
+          Кратък, редакторски първи екран с city-first фокус, категории и подбрани предложения. Без цена, без излишен шум, без да губиш вниманието си.
+        </Paragraph>
+
+        <div className="home-hero-actions">
+          <Link to={routes.events}>
+            <Button
+              type="primary"
+              size="large"
+              icon={<CalendarOutlined />}
+              className="home-hero-primary"
+            >
+              Виж събитията
+            </Button>
+          </Link>
+        </div>
+
+        <div className="home-hero-rail" aria-label="Категории">
+          {themes.map((theme) => (
+            <span key={theme} className="home-hero-rail-pill">
+              {theme}
+            </span>
+          ))}
+        </div>
+
+        <div className="home-hero-cities" aria-label="Градове">
+          {cities.map((city) => (
+            <span key={city} className="home-city-pill">
+              {city}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="home-hero-spotlight" aria-hidden="true">
+        <div className="home-hero-spotlight-orb" />
+        <div className="home-hero-spotlight-card">
+          <div className="home-hero-spotlight-pill">
+            <FireOutlined /> На фокус днес
+          </div>
+          <div className="home-hero-spotlight-title">Афишен панел за следващото излизане.</div>
+          <div className="home-hero-spotlight-text">
+            Стилизирано резюме на програмата за вечерта, с град, час и категория. Изглежда като билетен панел, но не натрапва цена.
+          </div>
+
+          <div className="home-hero-spotlight-schedule">
+            {featuredRows.map((row) => (
+              <div key={row.title} className="home-hero-spotlight-row">
+                <div className="home-hero-row-time">
+                  <ClockCircleOutlined /> {row.time}
+                </div>
+                <div className="home-hero-row-copy">
+                  <strong>{row.title}</strong>
+                  <span>{row.label} · {row.city}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="home-hero-spotlight-footer">
+            <span><CompassOutlined /> Град + категория</span>
+            <span><CalendarOutlined /> Подбрано за днес</span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

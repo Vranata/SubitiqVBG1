@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Route, Link } from 'atomic-router-react';
 import { useUnit } from 'effector-react';
-import { Button, ConfigProvider, Grid, Layout, Menu, Tooltip, theme as antdTheme } from 'antd';
+import { Button, ConfigProvider, Layout, Tooltip, theme as antdTheme } from 'antd';
 import { BgColorsOutlined, CalendarOutlined, HeartOutlined, HomeOutlined, LoginOutlined, LogoutOutlined, MoonOutlined, StarOutlined, SunOutlined } from '@ant-design/icons';
 import { history, routes } from './shared/routing';
 import { $isAuthenticated, $user, signOutFx } from './entities/model';
@@ -15,7 +15,7 @@ import Favorites from './pages/Favorites/index';
 import Login from './pages/Login/index';
 import Recommended from './pages/Recommended/index';
 
-const { Header, Sider, Content, Footer } = Layout;
+const { Header, Content, Footer } = Layout;
 
 type ThemeMode = 'light' | 'dark' | 'orange';
 
@@ -34,37 +34,45 @@ const navigationItems = [
   {
     key: 'home',
     icon: <HomeOutlined />,
-    label: <Link to={routes.home}>Начало</Link>,
+    to: routes.home,
+    label: 'Начало',
   },
   {
     key: 'events',
     icon: <CalendarOutlined />,
-    label: <Link to={routes.events}>Всички събития</Link>,
+    to: routes.events,
+    label: 'Всички събития',
   },
   {
     key: 'recommended',
     icon: <StarOutlined />,
-    label: <Link to={routes.recommended}>Препоръчано за теб</Link>,
+    to: routes.recommended,
+    label: 'Препоръчано за теб',
   },
   {
     key: 'favorites',
     icon: <HeartOutlined />,
-    label: <Link to={routes.favorites}>Любими</Link>,
+    to: routes.favorites,
+    label: 'Любими',
   },
 ];
 
 const SidebarNavigation: React.FC<{ themeMode: ThemeMode; selectedKey: string; compact?: boolean }> = ({ themeMode, selectedKey, compact = false }) => {
-  const menuTheme = themeMode === 'dark' ? 'dark' : 'light';
+  const isDark = themeMode === 'dark';
 
   return (
-    <Menu
-      className={compact ? 'app-navigation app-navigation-compact' : 'app-navigation'}
-      theme={menuTheme}
-      mode={compact ? 'horizontal' : 'inline'}
-      selectedKeys={[selectedKey]}
-      style={compact ? { width: '100%', borderBottom: 'none', background: 'transparent' } : { borderRight: 'none', background: 'transparent' }}
-      items={navigationItems}
-    />
+    <nav className={compact ? 'app-navigation app-navigation-compact' : 'app-navigation'} data-theme={isDark ? 'dark' : 'light'} aria-label="Основна навигация">
+      {navigationItems.map((item) => (
+        <Link
+          key={item.key}
+          to={item.to}
+          className={`app-navigation-link${selectedKey === item.key ? ' app-navigation-link-active' : ''}`}
+        >
+          <span className="app-navigation-link-icon">{item.icon}</span>
+          <span className="app-navigation-link-label">{item.label}</span>
+        </Link>
+      ))}
+    </nav>
   );
 };
 
@@ -100,8 +108,6 @@ const getThemeConfig = (mode: ThemeMode) => {
 };
 
 const App: React.FC = () => {
-  const screens = Grid.useBreakpoint();
-  const showSidebar = screens.lg ?? false;
   const [themeMode, setThemeMode] = useState<ThemeMode>('light');
   const [selectedKey, setSelectedKey] = useState(() => getRouteKey(typeof window !== 'undefined' ? window.location.pathname : '/'));
   const { isAuthenticated, signOut, user } = useUnit({
@@ -144,6 +150,7 @@ const App: React.FC = () => {
           style={{
             display: 'flex',
             alignItems: 'center',
+            gap: 18,
             position: 'sticky',
             top: 0,
             zIndex: 10000,
@@ -159,6 +166,10 @@ const App: React.FC = () => {
             <span style={{ color: 'var(--header-text)', fontWeight: 900, fontSize: '1.05rem', letterSpacing: '0.8px' }}>
               CULTURO BG
             </span>
+          </div>
+
+          <div className="header-navigation-shell">
+            <SidebarNavigation themeMode={themeMode} selectedKey={selectedKey} compact />
           </div>
 
           <div style={{ flex: 1 }} />
@@ -220,35 +231,7 @@ const App: React.FC = () => {
         </Header>
 
         <Layout style={{ minHeight: 'calc(100vh - 134px)', background: 'transparent', position: 'relative', zIndex: 1 }}>
-          {showSidebar ? (
-            <Sider
-              width={288}
-              theme={themeMode === 'dark' ? 'dark' : 'light'}
-              style={{
-                background: 'var(--surface-bg)',
-                borderRight: '1px solid var(--border-color)',
-                boxShadow: 'var(--shadow-soft)',
-                position: 'sticky',
-                top: 64,
-                alignSelf: 'flex-start',
-                height: 'calc(100vh - 134px)',
-                overflow: 'auto',
-              }}
-            >
-              <div style={{ padding: '24px 20px 12px', color: 'var(--text-primary)', fontWeight: 800, letterSpacing: '0.4px' }}>
-                Навигация
-              </div>
-              <SidebarNavigation themeMode={themeMode} selectedKey={selectedKey} />
-            </Sider>
-          ) : null}
-
-          <Content style={{ padding: showSidebar ? '24px 24px 24px 0' : '24px', position: 'relative', zIndex: 1 }}>
-            {!showSidebar ? (
-              <div style={{ marginBottom: '20px', padding: '12px 16px', background: 'var(--surface-bg)', border: '1px solid var(--border-color)', borderRadius: '16px', boxShadow: 'var(--shadow-soft)' }}>
-                <SidebarNavigation themeMode={themeMode} selectedKey={selectedKey} compact />
-              </div>
-            ) : null}
-
+          <Content style={{ padding: '24px', position: 'relative', zIndex: 1 }}>
             <div style={{ minHeight: 'calc(100vh - 198px)' }}>
               <Route route={routes.home} view={Home} />
               <Route route={routes.events} view={Events} />
