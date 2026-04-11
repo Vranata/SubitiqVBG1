@@ -21,6 +21,10 @@ type UserRow = {
   id_user: number;
 };
 
+type PreferenceRow = {
+  id_event_category: number;
+};
+
 const resolveCurrentUserDbId = async (authUserId: string): Promise<number> => {
   const { data, error } = await supabase
     .from('users')
@@ -52,7 +56,9 @@ const daysUntil = (event: EventItem) => {
 const Recommended: React.FC = () => {
   const [messageApi, contextHolder] = message.useMessage();
   const [allEvents, setAllEvents] = useState<EventItem[]>([]);
+  const [preferredCategoryIds, setPreferredCategoryIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [refreshToken, setRefreshToken] = useState(0);
 
   const { user, effectiveRegionId, likedEventIds, loadAllEvents, loadLikedEventIds, resetLikedEvents } = useUnit({
     user: $user,
@@ -62,6 +68,18 @@ const Recommended: React.FC = () => {
     loadLikedEventIds: fetchLikedEventIdsFx,
     resetLikedEvents: clearLikedEventIds,
   });
+
+  useEffect(() => {
+    const handlePreferenceUpdate = () => {
+      setRefreshToken((value) => value + 1);
+    };
+
+    window.addEventListener('culturo-preferences-updated', handlePreferenceUpdate);
+
+    return () => {
+      window.removeEventListener('culturo-preferences-updated', handlePreferenceUpdate);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -80,6 +98,7 @@ const Recommended: React.FC = () => {
 
         if (!user) {
           resetLikedEvents();
+          setPreferredCategoryIds([]);
           return;
         }
 
@@ -87,12 +106,24 @@ const Recommended: React.FC = () => {
 
         if (!cancelled) {
           await loadLikedEventIds(String(currentUserDbId));
+
+          const { data: preferenceRows, error: preferenceError } = await supabase
+            .from('user_likings')
+            .select('id_event_category')
+            .eq('id_user', currentUserDbId);
+
+          if (preferenceError) {
+            throw preferenceError;
+          }
+
+          setPreferredCategoryIds(((preferenceRows ?? []) as PreferenceRow[]).map((row) => String(row.id_event_category)));
         }
       } catch (error) {
         if (!cancelled) {
           messageApi.error(error instanceof Error ? error.message : 'Неуспешно зареждане на препоръките.');
           setAllEvents([]);
           resetLikedEvents();
+          setPreferredCategoryIds([]);
         }
       } finally {
         if (!cancelled) {
@@ -106,7 +137,7 @@ const Recommended: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [loadAllEvents, loadLikedEventIds, messageApi, resetLikedEvents, user?.authUserId]);
+  }, [loadAllEvents, loadLikedEventIds, messageApi, refreshToken, resetLikedEvents, user?.authUserId]);
 
   const recommendedEvents = useMemo(() => {
     const likedEventIdSet = new Set(likedEventIds);
@@ -115,6 +146,7 @@ const Recommended: React.FC = () => {
         .filter((event) => likedEventIdSet.has(event.id))
         .map((event) => event.categoryId)
     );
+    const preferredCategories = new Set(preferredCategoryIds);
 
     return allEvents
       .filter((event) => !likedEventIdSet.has(event.id))
@@ -127,9 +159,9 @@ const Recommended: React.FC = () => {
           reasonTags.push('В твоя регион');
         }
 
-        if (likedCategories.has(event.categoryId)) {
+        if (likedCategories.has(event.categoryId) || preferredCategories.has(String(event.categoryId))) {
           score += 3;
-          reasonTags.push('Сходна категория');
+          reasonTags.push('Твоя категория');
         }
 
         const remainingDays = daysUntil(event);
@@ -162,7 +194,7 @@ const Recommended: React.FC = () => {
 
         return left.event.startHour.localeCompare(right.event.startHour);
       });
-  }, [allEvents, effectiveRegionId, likedEventIds]);
+  }, [allEvents, effectiveRegionId, likedEventIds, preferredCategoryIds]);
 
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '40px 24px', color: 'var(--text-primary)' }}>

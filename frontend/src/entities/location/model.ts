@@ -38,6 +38,8 @@ const readStoredLocationRegion = (): DetectedLocationRegion | null => {
 export const locationPermissionChanged = createEvent<LocationPermissionState>();
 export const locationRegionDetected = createEvent<DetectedLocationRegion | null>();
 export const locationRegionCleared = createEvent<void>();
+export const locationPromptRequested = createEvent<void>();
+export const locationPromptClosed = createEvent<void>();
 
 export const $locationPermissionState = createStore<LocationPermissionState>(readStoredPermissionState())
   .on(locationPermissionChanged, (_, nextState) => nextState);
@@ -45,6 +47,11 @@ export const $locationPermissionState = createStore<LocationPermissionState>(rea
 export const $detectedLocationRegion = createStore<DetectedLocationRegion | null>(readStoredLocationRegion())
   .on(locationRegionDetected, (_, nextRegion) => nextRegion)
   .reset(locationRegionCleared);
+
+export const $isLocationPromptOpen = createStore(false)
+  .on(locationPromptRequested, () => true)
+  .on(locationPromptClosed, () => false)
+  .on(locationPermissionChanged, (_, nextState) => nextState === 'unknown');
 
 export const $effectiveRegionId = combine($detectedLocationRegion, $user, (detectedRegion, user) => {
   if (detectedRegion) {

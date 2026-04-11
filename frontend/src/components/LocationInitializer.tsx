@@ -1,20 +1,24 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Modal, message } from 'antd';
 import { detectBulgarianRegionFromBrowserLocation, isLocationPermissionDeniedError } from '../shared/browserLocation';
 import {
+  $detectedLocationRegion,
+  $isLocationPromptOpen,
   $locationPermissionState,
   locationPermissionChanged,
+  locationPromptClosed,
   locationRegionDetected,
 } from '../entities/location/model';
 import { useUnit } from 'effector-react';
 
 const LocationInitializer: React.FC = () => {
-  const [isPromptVisible, setIsPromptVisible] = useState(false);
   const [isResolving, setIsResolving] = useState(false);
-  const hasInitialized = useRef(false);
-  const { permissionState, setPermissionState, setDetectedRegion } = useUnit({
+  const { permissionState, detectedRegion, isPromptOpen, setPermissionState, setDetectedRegion, closePrompt } = useUnit({
     permissionState: $locationPermissionState,
+    detectedRegion: $detectedLocationRegion,
+    isPromptOpen: $isLocationPromptOpen,
     setPermissionState: locationPermissionChanged,
+    closePrompt: locationPromptClosed,
     setDetectedRegion: locationRegionDetected,
   });
 
@@ -25,7 +29,7 @@ const LocationInitializer: React.FC = () => {
       const nextRegion = await detectBulgarianRegionFromBrowserLocation();
       setPermissionState('accepted');
       setDetectedRegion(nextRegion);
-      setIsPromptVisible(false);
+      closePrompt();
 
       if (nextRegion) {
         message.success(`Открихме локацията ти: ${nextRegion.regionName}.`);
@@ -35,12 +39,12 @@ const LocationInitializer: React.FC = () => {
     } catch (error) {
       if (isLocationPermissionDeniedError(error)) {
         setPermissionState('declined');
-        setIsPromptVisible(false);
+        closePrompt();
         message.warning('Без достъп до локация ще показваме препоръки по профила ти или общо.');
         return;
       }
 
-      setIsPromptVisible(false);
+      closePrompt();
       message.error(error instanceof Error ? error.message : 'Не успяхме да определим локацията ти.');
     } finally {
       setIsResolving(false);
@@ -48,25 +52,27 @@ const LocationInitializer: React.FC = () => {
   };
 
   useEffect(() => {
-    if (hasInitialized.current) {
+    if (!isPromptOpen) {
       return;
     }
-
-    hasInitialized.current = true;
 
     if (permissionState === 'accepted') {
-      void resolveLocation();
+      if (!detectedRegion) {
+        void resolveLocation();
+      } else {
+        closePrompt();
+      }
       return;
     }
 
-    if (permissionState === 'unknown') {
-      setIsPromptVisible(true);
+    if (permissionState === 'declined') {
+      closePrompt();
     }
-  }, [permissionState]);
+  }, [closePrompt, detectedRegion, isPromptOpen, permissionState]);
 
   return (
     <Modal
-      open={isPromptVisible}
+      open={isPromptOpen && permissionState === 'unknown'}
       title="Използване на местоположение"
       okText="Разреши"
       cancelText="Не сега"
@@ -74,7 +80,7 @@ const LocationInitializer: React.FC = () => {
       onOk={() => void resolveLocation()}
       onCancel={() => {
         setPermissionState('declined');
-        setIsPromptVisible(false);
+        closePrompt();
       }}
       centered
       maskClosable={false}

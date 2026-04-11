@@ -1,9 +1,13 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Form, Input, Modal, Popover, Radio, Select, Space, Typography, message } from 'antd';
 import { useUnit } from 'effector-react';
 import type { AppUser } from '../entities/model';
 import { $categoryOptions, fetchCategoriesFx } from '../entities/events/model';
+import { $isLocationPromptOpen } from '../entities/location/model';
 import { supabase } from '../services/supabaseClient';
+import ProfileSettingsModal from './ProfileSettingsModal';
+import { fallbackCategoryOptions } from '../shared/profileCategoryOptions';
+import { hasLocalOnboardingCompletion } from '../shared/profileOnboarding';
 
 const { TextArea } = Input;
 
@@ -18,21 +22,17 @@ type UpgradeRequestValues = {
 
 const adminEmail = 'culturobg@gmail.com';
 
-const fallbackSpecialtyOptions = [
-  { label: 'Концерти', value: '10' },
-  { label: 'Спорт', value: '20' },
-  { label: 'Театър', value: '30' },
-  { label: 'Кино', value: '40' },
-  { label: 'Фестивали', value: '50' },
-];
-
 const UserUpgradePopover: React.FC<{ user: AppUser }> = ({ user }) => {
   const [form] = Form.useForm<UpgradeRequestValues>();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isSurveyOpen, setIsSurveyOpen] = useState(false);
+  const surveyPromptedUserIdRef = useRef<string | null>(null);
 
-  const { categoryOptions, loadCategories } = useUnit({
+  const { categoryOptions, loadCategories, isLocationPromptOpen } = useUnit({
     categoryOptions: $categoryOptions,
     loadCategories: fetchCategoriesFx,
+    isLocationPromptOpen: $isLocationPromptOpen,
   });
 
   useEffect(() => {
@@ -40,6 +40,42 @@ const UserUpgradePopover: React.FC<{ user: AppUser }> = ({ user }) => {
       void loadCategories();
     }
   }, [categoryOptions.length, loadCategories]);
+
+  useEffect(() => {
+    if (!user) {
+      surveyPromptedUserIdRef.current = null;
+      setIsSurveyOpen(false);
+      setIsSettingsOpen(false);
+      return;
+    }
+
+    if (user.onboardingCompleted || hasLocalOnboardingCompletion(user.authUserId)) {
+      surveyPromptedUserIdRef.current = user.authUserId;
+      setIsSurveyOpen(false);
+      return;
+    }
+
+    if (surveyPromptedUserIdRef.current === user.authUserId) {
+      return;
+    }
+
+    if (isLocationPromptOpen) {
+      return;
+    }
+
+    const promptTimer = window.setTimeout(() => {
+      if (surveyPromptedUserIdRef.current === user.authUserId) {
+        return;
+      }
+
+      surveyPromptedUserIdRef.current = user.authUserId;
+      setIsSurveyOpen(true);
+    }, 600);
+
+    return () => {
+      window.clearTimeout(promptTimer);
+    };
+  }, [isLocationPromptOpen, user?.authUserId, user?.onboardingCompleted]);
 
   useEffect(() => {
     if (!isModalOpen) {
@@ -50,17 +86,31 @@ const UserUpgradePopover: React.FC<{ user: AppUser }> = ({ user }) => {
       applicantName: user.name,
       applicantEmail: user.email,
       applicantType: 'person',
-      specialtyCategoryId: categoryOptions[0]?.value ?? fallbackSpecialtyOptions[0].value,
+      specialtyCategoryId: categoryOptions[0]?.value ?? fallbackCategoryOptions[0].value,
     });
   }, [categoryOptions, form, isModalOpen, user.email, user.name]);
 
   const specialtyOptions = useMemo(
-    () => (categoryOptions.length > 0 ? categoryOptions : fallbackSpecialtyOptions),
+    () => (categoryOptions.length > 0 ? categoryOptions : fallbackCategoryOptions),
     [categoryOptions]
   );
 
   const handleOpenModal = () => {
     setIsModalOpen(true);
+  };
+
+  const handleOpenSettings = () => {
+    surveyPromptedUserIdRef.current = user.authUserId;
+    setIsSurveyOpen(false);
+    setIsSettingsOpen(true);
+  };
+
+  const handleSettingsClose = () => {
+    setIsSettingsOpen(false);
+  };
+
+  const handleSurveyCompleted = () => {
+    setIsSurveyOpen(false);
   };
 
   const handleCloseModal = () => {
@@ -113,48 +163,6 @@ const UserUpgradePopover: React.FC<{ user: AppUser }> = ({ user }) => {
     }
   };
 
-  const badge = (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 12 }}>
-      <span
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          maxWidth: 200,
-          height: 34,
-          padding: '0 12px',
-          borderRadius: 999,
-          border: '1px solid var(--toggle-border)',
-          background: 'var(--toggle-bg)',
-          color: 'var(--header-text)',
-          fontSize: '0.8rem',
-          fontWeight: 600,
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-        }}
-      >
-        {user.email}
-      </span>
-      <span
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          height: 34,
-          padding: '0 12px',
-          borderRadius: 999,
-          border: '1px solid var(--toggle-border)',
-          background: 'var(--toggle-bg)',
-          color: 'var(--header-text)',
-          fontSize: '0.72rem',
-          fontWeight: 700,
-          whiteSpace: 'nowrap',
-        }}
-      >
-        {user.roleName}
-      </span>
-    </div>
-  );
-
   const content = (
     <div style={{ maxWidth: 260 }}>
       <Typography.Title level={5} style={{ marginBottom: 8, color: 'var(--text-primary)' }}>
@@ -169,15 +177,97 @@ const UserUpgradePopover: React.FC<{ user: AppUser }> = ({ user }) => {
     </div>
   );
 
-  return (
-    <>
+  const badge = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 12 }}>
+      <Popover
+        trigger="hover"
+        placement="bottomRight"
+        content={
+          <div style={{ maxWidth: 260 }}>
+            <Typography.Title level={5} style={{ marginBottom: 8, color: 'var(--text-primary)' }}>
+              Настройки
+            </Typography.Title>
+            <Typography.Paragraph style={{ marginBottom: 12, color: 'var(--text-secondary)' }}>
+              Прегледай профила си, смени името, имейла, паролата и предпочитанията си.
+            </Typography.Paragraph>
+            <Button type="primary" block onClick={handleOpenSettings}>
+              Отвори профил
+            </Button>
+          </div>
+        }
+      >
+        <Button
+          type="text"
+          onClick={handleOpenSettings}
+          aria-label="Отвори профилни настройки"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            maxWidth: 200,
+            height: 34,
+            padding: '0 12px',
+            borderRadius: 999,
+            border: '1px solid var(--toggle-border)',
+            background: 'var(--toggle-bg)',
+            color: 'var(--header-text)',
+            fontSize: '0.8rem',
+            fontWeight: 600,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            cursor: 'pointer',
+          }}
+        >
+          {user.email}
+        </Button>
+      </Popover>
+
       {user.roleName === 'User' ? (
         <Popover content={content} trigger="hover" placement="bottomRight">
-          {badge}
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              height: 34,
+              padding: '0 12px',
+              borderRadius: 999,
+              border: '1px solid var(--toggle-border)',
+              background: 'var(--toggle-bg)',
+              color: 'var(--header-text)',
+              fontSize: '0.72rem',
+              fontWeight: 700,
+              whiteSpace: 'nowrap',
+              cursor: 'pointer',
+            }}
+          >
+            {user.roleName}
+          </span>
         </Popover>
       ) : (
-        badge
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            height: 34,
+            padding: '0 12px',
+            borderRadius: 999,
+            border: '1px solid var(--toggle-border)',
+            background: 'var(--toggle-bg)',
+            color: 'var(--header-text)',
+            fontSize: '0.72rem',
+            fontWeight: 700,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {user.roleName}
+        </span>
       )}
+    </div>
+  );
+
+  return (
+    <>
+      {badge}
 
       <Modal
         open={isModalOpen}
@@ -256,6 +346,24 @@ const UserUpgradePopover: React.FC<{ user: AppUser }> = ({ user }) => {
           </Form.Item>
         </Form>
       </Modal>
+
+      <ProfileSettingsModal
+        open={isSettingsOpen}
+        mode="profile"
+        user={user}
+        categoryOptions={categoryOptions.length > 0 ? categoryOptions : fallbackCategoryOptions}
+        onClose={handleSettingsClose}
+        onCompleted={handleSettingsClose}
+      />
+
+      <ProfileSettingsModal
+        open={isSurveyOpen}
+        mode="survey"
+        user={user}
+        categoryOptions={categoryOptions.length > 0 ? categoryOptions : fallbackCategoryOptions}
+        onClose={() => setIsSurveyOpen(false)}
+        onCompleted={handleSurveyCompleted}
+      />
     </>
   );
 };

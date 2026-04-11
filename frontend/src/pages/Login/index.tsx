@@ -4,6 +4,7 @@ import { Button, Card, Form, Input, Segmented, Space, Typography, message } from
 import { useUnit } from 'effector-react';
 import { history } from '../../shared/routing';
 import { resetPasswordFx, signInFx, signUpFx, updatePasswordFx } from '../../entities/model';
+import { locationPromptRequested } from '../../entities/location/model';
 
 type AuthMode = 'login' | 'register';
 
@@ -64,10 +65,12 @@ const Login: React.FC = () => {
 
         if (session) {
           message.success('Регистрацията е успешна.');
+          locationPromptRequested();
           return;
         }
 
         message.info('Регистрацията е успешна. Провери имейла си за потвърждение, ако е необходимо.');
+        locationPromptRequested();
         return;
       }
 
@@ -75,6 +78,8 @@ const Login: React.FC = () => {
         email: values.email,
         password: values.password,
       });
+
+      locationPromptRequested();
     } catch (error) {
       message.error(error instanceof Error ? error.message : 'Входът не беше успешен.');
     }

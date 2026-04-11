@@ -22,6 +22,7 @@ export type AppUser = {
   regionId: number | null;
   phone: string | null;
   biography: string | null;
+  onboardingCompleted: boolean;
 };
 
 type UserRow = {
@@ -34,12 +35,16 @@ type UserRow = {
   id_region: number | null;
   phone_user: string | null;
   biogr_user: string | null;
+  profile_onboarding_completed: boolean;
   user_category: Array<{
     id_category: number;
     name_category: UserRole;
     note_category_user: string;
   }> | null;
 };
+
+const isMissingOnboardingColumnError = (error: { code?: string | null; message?: string | null }) =>
+  error.code === '42703' || error.code === 'PGRST204' || Boolean(error.message?.includes('profile_onboarding_completed'));
 
 const roleFallbacks: Record<UserRole, { note: string }> = {
   User: {
@@ -77,6 +82,7 @@ const buildFallbackUser = (session: Session): AppUser => ({
   regionId: null,
   phone: null,
   biography: null,
+  onboardingCompleted: false,
 });
 
 const mapUserRow = (row: UserRow): AppUser => {
@@ -95,21 +101,46 @@ const mapUserRow = (row: UserRow): AppUser => {
     regionId: row.id_region,
     phone: row.phone_user,
     biography: row.biogr_user,
+    onboardingCompleted: row.profile_onboarding_completed,
   };
 };
 
-const loadUserProfileFx = createEffect(async (session: Session | null): Promise<AppUser | null> => {
+const loadUserProfileBySession = async (session: Session | null): Promise<AppUser | null> => {
   if (!session) {
     return null;
   }
 
+  const baseSelect = 'id_user, auth_user_id, email, name_user, id_category, picture, id_region, phone_user, biogr_user, user_category:id_category ( id_category, name_category, note_category_user )';
+  const extendedSelect = 'id_user, auth_user_id, email, name_user, id_category, picture, id_region, phone_user, biogr_user, profile_onboarding_completed, user_category:id_category ( id_category, name_category, note_category_user )';
+
   const { data, error } = await supabase
     .from('users')
-    .select('id_user, auth_user_id, email, name_user, id_category, picture, id_region, phone_user, biogr_user, user_category:id_category ( id_category, name_category, note_category_user )')
+    .select(extendedSelect)
     .eq('auth_user_id', session.user.id)
     .maybeSingle();
 
   if (error) {
+    if (isMissingOnboardingColumnError(error)) {
+      const fallbackResult = await supabase
+        .from('users')
+        .select(baseSelect)
+        .eq('auth_user_id', session.user.id)
+        .maybeSingle();
+
+      if (fallbackResult.error) {
+        throw fallbackResult.error;
+      }
+
+      if (!fallbackResult.data) {
+        return buildFallbackUser(session);
+      }
+
+      return mapUserRow({
+        ...(fallbackResult.data as Omit<UserRow, 'profile_onboarding_completed'>),
+        profile_onboarding_completed: false,
+      });
+    }
+
     throw error;
   }
 
@@ -118,6 +149,10 @@ const loadUserProfileFx = createEffect(async (session: Session | null): Promise<
   }
 
   return mapUserRow(data as UserRow);
+};
+
+const loadUserProfileFx = createEffect(async (session: Session | null): Promise<AppUser | null> => {
+  return loadUserProfileBySession(session);
 });
 
 redirect({
@@ -127,6 +162,7 @@ redirect({
 });
 
 export const checkSession = createEvent<void>();
+export const refreshUserProfile = createEvent<void>();
 export const authStateChanged = createEvent<Session | null>();
 export const signInFx = createEffect(async ({ email, password }: AuthCredentials) => signIn(email, password));
 export const signUpFx = createEffect(async ({ email, password }: AuthCredentials) => signUp(email, password));
@@ -140,8 +176,11 @@ export const startAuthSyncFx = createEffect(() => {
 });
 
 const checkSessionFx = createEffect(async () => getSession());
+export const refreshUserProfileFx = createEffect(async (): Promise<AppUser | null> => loadUserProfileBySession(await getSession()));
 
-export const $user = createStore<AppUser | null>(null).on(loadUserProfileFx.doneData, (_, user) => user);
+export const $user = createStore<AppUser | null>(null)
+  .on(loadUserProfileFx.doneData, (_, user) => user)
+  .on(refreshUserProfileFx.doneData, (_, user) => user);
 
 export const $isAuthenticated = $user.map((user) => Boolean(user));
 export const $userRole = $user.map((user) => user?.roleName ?? null);
@@ -152,6 +191,11 @@ export const $isRegularUser = $userRole.map((role) => role === 'User');
 sample({
   clock: checkSession,
   target: checkSessionFx,
+});
+
+sample({
+  clock: refreshUserProfile,
+  target: refreshUserProfileFx,
 });
 
 sample({

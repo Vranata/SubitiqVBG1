@@ -11,3 +11,7 @@ SUPABASE_ANON_KEY:eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsI
 Scraper:
 SCRAPER_AUTH_EMAIL:culturobg@gmail.com
 SCRAPER_AUTH_PASSWORD:Nikolay&Martin07
+
+supabase-credentials
+Email:culturobg@gmail.com
+PASSWORD:Nikolay&Martin07
