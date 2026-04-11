@@ -3,12 +3,14 @@ import { Button, Form, Input, Modal, Select, Space, Typography, message } from '
 import type { AppUser } from '../entities/model';
 import { refreshUserProfile } from '../entities/model';
 import { supabase } from '../services/supabaseClient';
-import { updateAccount, verifyPassword } from '../shared/api/auth';
+import { resetPassword, updateAccount } from '../shared/api/auth';
 import { fallbackCategoryOptions } from '../shared/profileCategoryOptions';
 import { setLocalOnboardingCompletion } from '../shared/profileOnboarding';
 
 const isMissingOnboardingColumnError = (error: { code?: string | null; message?: string | null }) =>
   error.code === '42703' || error.code === 'PGRST204' || Boolean(error.message?.includes('profile_onboarding_completed'));
+
+const isValidationError = (error: unknown) => Boolean(error && typeof error === 'object' && 'errorFields' in error);
 
 type CategoryOption = {
   label: string;
@@ -18,9 +20,6 @@ type CategoryOption = {
 type ProfileSettingsValues = {
   name: string;
   email: string;
-  currentPassword?: string;
-  nextPassword?: string;
-  confirmPassword?: string;
   categoryIds: string[];
 };
 
@@ -43,6 +42,10 @@ const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
 }) => {
   const [form] = Form.useForm<ProfileSettingsValues>();
   const [isSaving, setIsSaving] = useState(false);
+  const [isSendingEmailChange, setIsSendingEmailChange] = useState(false);
+  const [isSendingPasswordReset, setIsSendingPasswordReset] = useState(false);
+  const [isEmailChangeVisible, setIsEmailChangeVisible] = useState(false);
+  const [isPasswordChangeVisible, setIsPasswordChangeVisible] = useState(false);
   const availableCategories = useMemo(() => (categoryOptions.length > 0 ? categoryOptions : fallbackCategoryOptions), [categoryOptions]);
 
   useEffect(() => {
@@ -65,9 +68,6 @@ const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
       form.setFieldsValue({
         name: user.name,
         email: user.email,
-        currentPassword: undefined,
-        nextPassword: undefined,
-        confirmPassword: undefined,
         categoryIds: selectedCategoryIds,
       });
     };
@@ -75,6 +75,11 @@ const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
     void loadProfilePreferences().catch((error) => {
       message.error(error instanceof Error ? error.message : 'Неуспешно зареждане на профила.');
     });
+
+    setIsEmailChangeVisible(false);
+    setIsPasswordChangeVisible(false);
+    setIsSendingEmailChange(false);
+    setIsSendingPasswordReset(false);
   }, [form, open, user.email, user.id, user.name]);
 
   const persistCategoryPreferences = async (categoryIds: string[]) => {
@@ -140,43 +145,29 @@ const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
     }
   };
 
-  const handleSubmit = async (values: ProfileSettingsValues) => {
-    if (values.categoryIds.length < 3) {
-      message.error('Избери поне 3 категории.');
-      return;
-    }
+  const persistProfileBasics = async (nextName: string) => {
+    const profileUpdate = await supabase
+      .from('users')
+      .update({
+        name_user: nextName,
+      })
+      .eq('auth_user_id', user.authUserId);
 
+    if (profileUpdate.error) {
+      throw profileUpdate.error;
+    }
+  };
+
+  const handleSubmit = async (values: ProfileSettingsValues) => {
     setIsSaving(true);
 
     try {
       const categoryIds = Array.from(new Set(values.categoryIds));
       const nextName = mode === 'profile' ? (values.name ?? user.name).trim() : user.name;
-      const nextEmail = mode === 'profile' ? (values.email ?? user.email).trim() : user.email;
-      const nextPassword = mode === 'profile' ? values.nextPassword?.trim() ?? '' : '';
-      const confirmPassword = mode === 'profile' ? values.confirmPassword?.trim() ?? '' : '';
 
       if (mode === 'profile') {
-        const currentPassword = values.currentPassword?.trim() ?? '';
-
-        if (!currentPassword) {
-          message.error('Въведи старата си парола за потвърждение.');
-          return;
-        }
-
-        await verifyPassword({
-          email: user.email,
-          password: currentPassword,
-        });
-
-        if (nextPassword || nextEmail !== user.email || nextName !== user.name) {
-          if (nextPassword && nextPassword !== confirmPassword) {
-            message.error('Новите пароли не съвпадат.');
-            return;
-          }
-
+        if (nextName !== user.name) {
           await updateAccount({
-            ...(nextEmail !== user.email ? { email: nextEmail } : {}),
-            ...(nextPassword ? { password: nextPassword } : {}),
             data: {
               full_name: nextName,
               name: nextName,
@@ -187,30 +178,18 @@ const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
         const profileUpdate = await supabase
           .from('users')
           .update({
-            email: nextEmail,
             name_user: nextName,
             profile_onboarding_completed: true,
           })
           .eq('auth_user_id', user.authUserId);
 
         if (profileUpdate.error && isMissingOnboardingColumnError(profileUpdate.error)) {
-          const retryUpdate = await supabase
-            .from('users')
-            .update({
-              email: nextEmail,
-              name_user: nextName,
-            })
-            .eq('auth_user_id', user.authUserId);
-
-          if (retryUpdate.error) {
-            throw retryUpdate.error;
-          }
+          await persistProfileBasics(nextName);
         } else if (profileUpdate.error) {
           throw profileUpdate.error;
         }
 
         setLocalOnboardingCompletion(user.authUserId);
-
       }
 
       await persistCategoryPreferences(categoryIds);
@@ -221,7 +200,7 @@ const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
 
       await finishAndRefresh(
         mode === 'profile'
-          ? 'Профилът и предпочитанията са обновени. Ако имейлът е сменен, провери пощата си за потвърждение.'
+          ? 'Профилът и предпочитанията са обновени.'
           : 'Предпочитанията са запазени.',
         true
       );
@@ -229,6 +208,66 @@ const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
       message.error(error instanceof Error ? error.message : 'Неуспешно запазване на профила.');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleEmailChangeConfirm = async () => {
+    try {
+      const values = await form.validateFields(['email']);
+      const nextEmail = String(values.email ?? '').trim();
+
+      if (nextEmail === user.email) {
+        message.info('Имейлът вече е този, който използваш.');
+        return;
+      }
+
+      setIsSendingEmailChange(true);
+
+      await updateAccount({
+        email: nextEmail,
+        data: {
+          full_name: user.name,
+          name: user.name,
+        },
+      });
+
+      message.success('Изпратихме потвърждение за смяната на имейла. Провери текущата си поща за следващата стъпка.');
+      setIsEmailChangeVisible(false);
+  form.setFieldsValue({ email: user.email });
+      refreshUserProfile();
+      onCompleted();
+      onClose();
+    } catch (error) {
+      if (isValidationError(error)) {
+        return;
+      }
+
+      message.error(error instanceof Error ? error.message : 'Неуспешно изпращане на потвърждение за смяна на имейл.');
+    } finally {
+      setIsSendingEmailChange(false);
+    }
+  };
+
+  const handlePasswordResetRequest = async () => {
+    try {
+      if (typeof window === 'undefined') {
+        throw new Error('Неуспешно изпращане на линк за смяна на паролата.');
+      }
+
+      setIsSendingPasswordReset(true);
+
+      await resetPassword({
+        email: user.email,
+        redirectTo: `${window.location.origin}/login?mode=recovery`,
+      });
+
+      message.success('Изпратихме линк за смяна на паролата на текущия имейл.');
+      setIsPasswordChangeVisible(false);
+      onClose();
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : 'Неуспешно изпращане на линк за смяна на паролата.');
+    } finally {
+      setIsSendingPasswordReset(false);
     }
   };
 
@@ -253,6 +292,22 @@ const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
       </Space>
     ) : undefined;
 
+  const toggleEmailChange = () => {
+    setIsEmailChangeVisible((current) => {
+      const nextVisible = !current;
+
+      if (!nextVisible) {
+        form.setFieldsValue({ email: user.email });
+      }
+
+      return nextVisible;
+    });
+  };
+
+  const togglePasswordChange = () => {
+    setIsPasswordChangeVisible((current) => !current);
+  };
+
   return (
     <Modal
       open={open}
@@ -269,8 +324,8 @@ const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
       <Space direction="vertical" size="middle" style={{ width: '100%' }}>
         <Typography.Paragraph style={{ marginBottom: 0, color: 'var(--text-secondary)' }}>
           {mode === 'survey'
-            ? 'Избери поне 3 категории, за да направим първите препоръки по-точни. Можеш да пропуснеш тази стъпка.'
-            : 'Потвърждаваме промените със старата ти парола. Имейлът ще изисква допълнително потвърждение.'}
+            ? 'Избери категории, ако искаш, за да направим първите препоръки по-точни. Можеш да пропуснеш тази стъпка.'
+            : 'Имейлът и паролата се отварят само при изрично желание. Всяка промяна има свой отделен бутон за потвърждение.'}
         </Typography.Paragraph>
 
         <Form<ProfileSettingsValues>
@@ -290,79 +345,69 @@ const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                 <Input placeholder="Име и фамилия" size="large" />
               </Form.Item>
 
-              <Form.Item
-                label="Имейл"
-                name="email"
-                rules={[
-                  { required: true, message: 'Въведи имейл.' },
-                  { type: 'email', message: 'Въведи валиден имейл адрес.' },
-                ]}
-              >
-                <Input placeholder="name@example.com" size="large" />
-              </Form.Item>
+              <Button type="dashed" block onClick={toggleEmailChange}>
+                {isEmailChangeVisible ? 'Скрий смяната на имейла' : 'Смени имейла'}
+              </Button>
 
-              <Form.Item
-                label="Текуща парола"
-                name="currentPassword"
-                rules={[{ required: true, message: 'Въведи старата си парола.' }]}
-              >
-                <Input.Password placeholder="Стара парола" size="large" />
-              </Form.Item>
+              {isEmailChangeVisible ? (
+                <Space direction="vertical" size="small" style={{ width: '100%' }}>
+                  <Typography.Paragraph style={{ marginBottom: 0, color: 'var(--text-secondary)' }}>
+                    Желаете да смените имейла си? Ако не сте били вие, е добре да промените и данните си за вход.
+                  </Typography.Paragraph>
 
-              <Form.Item label="Нова парола" name="nextPassword">
-                <Input.Password placeholder="Остави празно, ако не сменяш паролата" size="large" />
-              </Form.Item>
+                  <Form.Item
+                    label="Нов имейл"
+                    name="email"
+                    rules={[
+                      { required: true, message: 'Въведи имейл.' },
+                      { type: 'email', message: 'Въведи валиден имейл адрес.' },
+                    ]}
+                  >
+                    <Input placeholder="name@example.com" size="large" />
+                  </Form.Item>
 
-              <Form.Item
-                label="Потвърди новата парола"
-                name="confirmPassword"
-                dependencies={['nextPassword']}
-                rules={[
-                  ({ getFieldValue }) => ({
-                    validator: async (_, value) => {
-                      const nextPassword = getFieldValue('nextPassword') as string | undefined;
+                  <Button type="primary" block onClick={handleEmailChangeConfirm} loading={isSendingEmailChange}>
+                    Изпрати потвърждение към текущия имейл
+                  </Button>
+                </Space>
+              ) : (
+                <div style={{ color: 'var(--text-secondary)' }}>Имейл: {user.email}</div>
+              )}
 
-                      if (!nextPassword) {
-                        return Promise.resolve();
-                      }
+              <Button type="dashed" block onClick={togglePasswordChange}>
+                {isPasswordChangeVisible ? 'Скрий смяната на паролата' : 'Смени паролата'}
+              </Button>
 
-                      if (!value || value === nextPassword) {
-                        return Promise.resolve();
-                      }
+              {isPasswordChangeVisible && (
+                <Space direction="vertical" size="small" style={{ width: '100%' }}>
+                  <Typography.Paragraph style={{ marginBottom: 0, color: 'var(--text-secondary)' }}>
+                    Желаете да смените паролата си? Ако не сте били вие, е добре да промените и данните си за вход.
+                  </Typography.Paragraph>
 
-                      return Promise.reject(new Error('Новите пароли не съвпадат.'));
-                    },
-                  }),
-                ]}
-              >
-                <Input.Password placeholder="Повтори новата парола" size="large" />
-              </Form.Item>
+                  <Button type="primary" block onClick={handlePasswordResetRequest} loading={isSendingPasswordReset}>
+                    Изпрати линк за смяна на паролата
+                  </Button>
+                </Space>
+              )}
             </>
           )}
 
           <Form.Item
             label="Предпочитани категории"
             name="categoryIds"
-            rules={[
-              {
-                validator: async (_, value: string[] | undefined) => {
-                  if (Array.isArray(value) && value.length >= 3) {
-                    return Promise.resolve();
-                  }
-
-                  return Promise.reject(new Error('Избери поне 3 категории.'));
-                },
-              },
-            ]}
           >
             <Select
               mode="multiple"
               size="large"
-              placeholder="Избери поне 3 категории"
+              placeholder="Избери категории, ако искаш"
               options={availableCategories}
               maxTagCount="responsive"
             />
           </Form.Item>
+
+          <Typography.Text type="secondary" style={{ display: 'block', marginTop: -8 }}>
+            Категориите не са задължителни. Можеш да оставиш полето празно.
+          </Typography.Text>
         </Form>
       </Space>
     </Modal>
