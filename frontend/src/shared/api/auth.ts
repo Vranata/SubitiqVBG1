@@ -107,3 +107,13 @@ export const getSession = async (): Promise<Session | null> => {
 
   return data.session ?? null;
 };
+
+export const getUser = async () => {
+  const { data, error } = await supabase.auth.getUser();
+
+  if (error) {
+    throw error;
+  }
+
+  return data.user;
+};

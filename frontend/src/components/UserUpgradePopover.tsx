@@ -20,8 +20,6 @@ type UpgradeRequestValues = {
   reason: string;
 };
 
-const adminEmail = 'culturobg@gmail.com';
-
 const UserUpgradePopover: React.FC<{ user: AppUser }> = ({ user }) => {
   const [form] = Form.useForm<UpgradeRequestValues>();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -120,23 +118,17 @@ const UserUpgradePopover: React.FC<{ user: AppUser }> = ({ user }) => {
 
   const handleSubmit = async (values: UpgradeRequestValues) => {
     const specialtyLabel = specialtyOptions.find((option) => option.value === values.specialtyCategoryId)?.label ?? values.specialtyCategoryId;
-    const mailBody = [
-      'Заявка за Special User',
-      '',
-      `Име: ${values.applicantName}`,
-      `Имейл: ${values.applicantEmail}`,
-      `Специалност/категория: ${specialtyLabel}`,
-      `Тип: ${values.applicantType === 'company' ? 'Фирма' : 'Лице'}`,
-      `EIK/INDDS: ${values.applicantType === 'company' ? values.companyIdentifier ?? '-' : '-'}`,
-      '',
-      'Мотивация:',
-      values.reason,
-      '',
-      `Подал от: ${user.email}`,
-      `Роля: ${user.roleName}`,
-    ].join('\n');
-
-    const mailto = `mailto:${adminEmail}?subject=${encodeURIComponent(`Upgrade request from ${values.applicantName}`)}&body=${encodeURIComponent(mailBody)}`;
+    const requestPayload = {
+      applicantName: values.applicantName,
+      applicantEmail: values.applicantEmail,
+      specialtyCategory: specialtyLabel,
+      specialtyCategoryId: Number(values.specialtyCategoryId),
+      applicantType: values.applicantType,
+      companyIdentifier: values.applicantType === 'company' ? values.companyIdentifier ?? null : null,
+      reason: values.reason,
+      submittedByEmail: user.email,
+      submittedByRole: user.roleName,
+    };
 
     try {
       const { error } = await supabase.from('user_upgrade_requests').insert({
@@ -153,13 +145,19 @@ const UserUpgradePopover: React.FC<{ user: AppUser }> = ({ user }) => {
         throw error;
       }
 
-      message.success('Заявката е записана. Отваря се имейл към администратора.');
+      const { error: notificationError } = await supabase.functions.invoke('send-upgrade-request', {
+        body: requestPayload,
+      });
+
+      if (notificationError) {
+        throw notificationError;
+      }
+
+      message.success('Заявката е записана и е изпратена на администратора.');
       setIsModalOpen(false);
       form.resetFields();
-      window.location.href = mailto;
     } catch (error) {
       message.error(error instanceof Error ? error.message : 'Неуспешно изпращане на заявката.');
-      window.location.href = mailto;
     }
   };
 

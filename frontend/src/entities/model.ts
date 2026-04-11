@@ -2,7 +2,7 @@ import type { Session } from '@supabase/supabase-js';
 import { redirect } from 'atomic-router';
 import { createEffect, createEvent, createStore, sample } from 'effector';
 import { routes } from '../shared/routing';
-import { getSession, resetPassword, signIn, signOut, signUp, updatePassword, type AuthCredentials, type ResetPasswordPayload, type UpdatePasswordPayload } from '../shared/api/auth';
+import { getSession, getUser, resetPassword, signIn, signOut, signUp, updatePassword, type AuthCredentials, type ResetPasswordPayload, type UpdatePasswordPayload } from '../shared/api/auth';
 import { supabase } from '../services/supabaseClient';
 
 const goHome = createEvent<void>();
@@ -110,6 +110,9 @@ const loadUserProfileBySession = async (session: Session | null): Promise<AppUse
     return null;
   }
 
+  const authUser = await getUser();
+  const authEmail = authUser?.email ?? session.user.email ?? '';
+
   const baseSelect = 'id_user, auth_user_id, email, name_user, id_category, picture, id_region, phone_user, biogr_user, user_category:id_category ( id_category, name_category, note_category_user )';
   const extendedSelect = 'id_user, auth_user_id, email, name_user, id_category, picture, id_region, phone_user, biogr_user, profile_onboarding_completed, user_category:id_category ( id_category, name_category, note_category_user )';
 
@@ -146,6 +149,22 @@ const loadUserProfileBySession = async (session: Session | null): Promise<AppUse
 
   if (!data) {
     return buildFallbackUser(session);
+  }
+
+  if (authEmail && data.email !== authEmail) {
+    const syncEmailResult = await supabase
+      .from('users')
+      .update({ email: authEmail })
+      .eq('auth_user_id', session.user.id);
+
+    if (syncEmailResult.error && !isMissingOnboardingColumnError(syncEmailResult.error)) {
+      throw syncEmailResult.error;
+    }
+
+    return mapUserRow({
+      ...data,
+      email: authEmail,
+    } as UserRow);
   }
 
   return mapUserRow(data as UserRow);
