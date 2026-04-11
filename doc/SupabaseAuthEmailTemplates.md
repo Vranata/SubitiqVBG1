@@ -58,3 +58,32 @@ Notes
 	- `Изпрати потвърждение към текущия имейл`
 	- `Изпрати линк за смяна на паролата`
 	- `Ако не сте били вие, е добре да промените данните си за вход.`
+
+## Invite User
+
+Use this template for the automated admin notification sent by the upgrade request flow.
+
+Subject
+```text
+Заявка за Special User: {{ .Data.applicant_name }}
+```
+
+HTML body
+```html
+<h2>Нова заявка за Special User</h2>
+<p><strong>Име:</strong> {{ .Data.applicant_name }}</p>
+<p><strong>Имейл:</strong> {{ .Data.applicant_email }}</p>
+<p><strong>Категория:</strong> {{ .Data.specialty_category }}</p>
+<p><strong>Тип:</strong> {{ .Data.applicant_type }}</p>
+<p><strong>EIK/INDDS:</strong> {{ .Data.company_identifier }}</p>
+<p><strong>Мотивация:</strong></p>
+<p>{{ .Data.reason }}</p>
+<hr />
+<p><strong>Подал от:</strong> {{ .Data.submitted_by_email }}</p>
+<p><strong>Роля:</strong> {{ .Data.submitted_by_role }}</p>
+```
+
+Notes
+- This is the template that Supabase sends when the edge function calls `inviteUserByEmail()`.
+- Keep the invite template enabled in Supabase Auth so the admin receives the mail automatically.
+- If you want the copy in Bulgarian only, replace the subject and headings with Bulgarian text, but keep the `.Data.*` placeholders.

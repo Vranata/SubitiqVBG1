@@ -1,3 +1,5 @@
+/// <reference path="./types.d.ts" />
+
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { corsHeaders } from 'jsr:@supabase/supabase-js@2/cors';
 
@@ -14,10 +16,9 @@ type UpgradeRequestBody = {
 };
 
 const adminEmail = Deno.env.get('ADMIN_EMAIL') ?? 'culturobg@gmail.com';
-const resendApiKey = Deno.env.get('RESEND_API_KEY');
-const fromEmail = Deno.env.get('UPGRADE_REQUEST_FROM_EMAIL');
 const supabaseUrl = Deno.env.get('SUPABASE_URL');
 const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
+const serviceRoleKey = Deno.env.get('SERVICE_ROLE_KEY');
 
 const jsonResponse = (status: number, body: Record<string, unknown>) =>
   new Response(JSON.stringify(body), {
@@ -36,7 +37,7 @@ const escapeHtml = (value: string) =>
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;');
 
-Deno.serve(async (request) => {
+Deno.serve(async (request: Request) => {
   if (request.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -49,23 +50,30 @@ Deno.serve(async (request) => {
     return jsonResponse(500, { error: 'Missing Supabase environment variables.' });
   }
 
-  if (!resendApiKey || !fromEmail) {
+  if (!serviceRoleKey) {
     return jsonResponse(500, {
-      error: 'Missing mail provider configuration. Set RESEND_API_KEY and UPGRADE_REQUEST_FROM_EMAIL in Supabase secrets.',
+      error: 'Missing service role key. Set SERVICE_ROLE_KEY in Supabase secrets.',
     });
   }
 
   const authHeader = request.headers.get('Authorization');
-  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  const userSupabase = createClient(supabaseUrl, supabaseAnonKey, {
     global: {
       headers: authHeader ? { Authorization: authHeader } : {},
+    },
+  });
+
+  const adminSupabase = createClient(supabaseUrl, serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
     },
   });
 
   const {
     data: { user },
     error: authError,
-  } = await supabase.auth.getUser();
+  } = await userSupabase.auth.getUser();
 
   if (authError || !user) {
     return jsonResponse(401, { error: 'Unauthorized' });
@@ -81,57 +89,27 @@ Deno.serve(async (request) => {
   const submittedByEmail = payload.submittedByEmail?.trim() || user.email || '-';
   const submittedByRole = payload.submittedByRole?.trim() || '-';
 
-  const subject = `Upgrade request from ${applicantName}`;
-  const html = `
-    <h2>Заявка за Special User</h2>
-    <p><strong>Име:</strong> ${escapeHtml(applicantName)}</p>
-    <p><strong>Имейл:</strong> ${escapeHtml(applicantEmail)}</p>
-    <p><strong>Категория:</strong> ${escapeHtml(specialtyCategory)}</p>
-    <p><strong>Тип:</strong> ${escapeHtml(applicantType)}</p>
-    <p><strong>EIK/INDDS:</strong> ${escapeHtml(companyIdentifier)}</p>
-    <p><strong>Мотивация:</strong></p>
-    <p>${escapeHtml(reason).replaceAll('\n', '<br />')}</p>
-    <hr />
-    <p><strong>Подал от:</strong> ${escapeHtml(submittedByEmail)}</p>
-    <p><strong>Роля:</strong> ${escapeHtml(submittedByRole)}</p>
-  `;
-
-  const text = [
-    'Заявка за Special User',
-    '',
-    `Име: ${applicantName}`,
-    `Имейл: ${applicantEmail}`,
-    `Категория: ${specialtyCategory}`,
-    `Тип: ${applicantType}`,
-    `EIK/INDDS: ${companyIdentifier}`,
-    '',
-    'Мотивация:',
+  const inviteMetadata = {
+    applicant_name: applicantName,
+    applicant_email: applicantEmail,
+    specialty_category: specialtyCategory,
+    specialty_category_id: String(payload.specialtyCategoryId ?? ''),
+    applicant_type: applicantType,
+    company_identifier: companyIdentifier,
     reason,
-    '',
-    `Подал от: ${submittedByEmail}`,
-    `Роля: ${submittedByRole}`,
-  ].join('\n');
+    submitted_by_email: submittedByEmail,
+    submitted_by_role: submittedByRole,
+  };
 
-  const resendResponse = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${resendApiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from: fromEmail,
-      to: [adminEmail],
-      subject,
-      html,
-      text,
-    }),
+  const { error: inviteError } = await adminSupabase.auth.admin.inviteUserByEmail(adminEmail, {
+    data: inviteMetadata,
+    redirectTo: request.headers.get('origin') ? `${request.headers.get('origin')}/login` : undefined,
   });
 
-  if (!resendResponse.ok) {
-    const errorText = await resendResponse.text();
+  if (inviteError) {
     return jsonResponse(502, {
       error: 'Failed to send upgrade request email.',
-      details: errorText,
+      details: inviteError.message,
     });
   }
 
