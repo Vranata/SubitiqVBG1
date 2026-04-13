@@ -1,6 +1,6 @@
 /// <reference path="./types.d.ts" />
 
-import { createClient } from 'jsr:@supabase/supabase-js@2';
+import nodemailer from 'npm:nodemailer';
 import { corsHeaders } from 'jsr:@supabase/supabase-js@2/cors';
 
 type UpgradeRequestBody = {
@@ -16,9 +16,20 @@ type UpgradeRequestBody = {
 };
 
 const adminEmail = Deno.env.get('ADMIN_EMAIL') ?? 'culturobg@gmail.com';
-const serviceRoleKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBvamluZmtubGZvY2p0dHhpcnBiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NDk2NDM1MywiZXhwIjoyMDkwNTQwMzUzfQ.JFcmF2Qz4ZmEsghsioMFYXVHxXxiuF2MSIqdpwVvTcc';
-const supabaseUrl = Deno.env.get('SUPABASE_URL');
-const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
+const smtpUser = Deno.env.get('SMTP_USER');
+const smtpAppPassword = Deno.env.get('SMTP_APP_PASSWORD');
+
+const smtpTransport = smtpUser && smtpAppPassword
+  ? nodemailer.createTransport({
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
+    auth: {
+      user: smtpUser,
+      pass: smtpAppPassword,
+    },
+  })
+  : null;
 
 const jsonResponse = (status: number, body: Record<string, unknown>) =>
   new Response(JSON.stringify(body), {
@@ -37,25 +48,51 @@ const escapeHtml = (value: string) =>
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;');
 
-const buildInviteAliasEmail = (email: string) => {
-  const atIndex = email.indexOf('@');
+const buildEmailHtml = (payload: {
+  applicantName: string;
+  applicantEmail: string;
+  specialtyCategory: string;
+  applicantType: string;
+  companyIdentifier: string;
+  reason: string;
+  submittedByEmail: string;
+  submittedByRole: string;
+}) => `
+  <h2>Нова заявка за Special User</h2>
+  <p><strong>Име:</strong> ${escapeHtml(payload.applicantName)}</p>
+  <p><strong>Имейл:</strong> ${escapeHtml(payload.applicantEmail)}</p>
+  <p><strong>Категория:</strong> ${escapeHtml(payload.specialtyCategory)}</p>
+  <p><strong>Тип:</strong> ${escapeHtml(payload.applicantType)}</p>
+  <p><strong>EIK/INDDS:</strong> ${escapeHtml(payload.companyIdentifier)}</p>
+  <p><strong>Мотивация:</strong></p>
+  <p>${escapeHtml(payload.reason).replaceAll('\n', '<br />')}</p>
+  <hr />
+  <p><strong>Подал от:</strong> ${escapeHtml(payload.submittedByEmail)}</p>
+  <p><strong>Роля:</strong> ${escapeHtml(payload.submittedByRole)}</p>
+`;
 
-  if (atIndex === -1) {
-    return email;
-  }
-
-  const localPart = email.slice(0, atIndex);
-  const domainPart = email.slice(atIndex + 1);
-  const uniqueSuffix = `${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
-
-  return `${localPart}+upgrade-request-${uniqueSuffix}@${domainPart}`;
-};
-
-const collectNotificationRecipients = (email: string) => {
-  const recipients = [email, buildInviteAliasEmail(email)];
-
-  return recipients.filter((recipient, index) => recipients.indexOf(recipient) === index);
-};
+const buildEmailText = (payload: {
+  applicantName: string;
+  applicantEmail: string;
+  specialtyCategory: string;
+  applicantType: string;
+  companyIdentifier: string;
+  reason: string;
+  submittedByEmail: string;
+  submittedByRole: string;
+}) => [
+  'Нова заявка за Special User',
+  `Име: ${payload.applicantName}`,
+  `Имейл: ${payload.applicantEmail}`,
+  `Категория: ${payload.specialtyCategory}`,
+  `Тип: ${payload.applicantType}`,
+  `EIK/INDDS: ${payload.companyIdentifier}`,
+  'Мотивация:',
+  payload.reason,
+  '---',
+  `Подал от: ${payload.submittedByEmail}`,
+  `Роля: ${payload.submittedByRole}`,
+].join('\n');
 
 Deno.serve(async (request: Request) => {
   try {
@@ -67,13 +104,9 @@ Deno.serve(async (request: Request) => {
       return jsonResponse(405, { error: 'Method not allowed' });
     }
 
-    if (!supabaseUrl || !supabaseAnonKey) {
-      return jsonResponse(500, { error: 'Missing Supabase environment variables.' });
-    }
-
-    if (!serviceRoleKey) {
+    if (!smtpTransport) {
       return jsonResponse(500, {
-        error: 'Missing service role key. Set SERVICE_ROLE_KEY in Supabase secrets.',
+        error: 'Missing SMTP configuration. Set SMTP_USER and SMTP_APP_PASSWORD in Supabase secrets.',
       });
     }
 
@@ -87,46 +120,34 @@ Deno.serve(async (request: Request) => {
     const submittedByEmail = payload.submittedByEmail?.trim() || '-';
     const submittedByRole = payload.submittedByRole?.trim() || '-';
 
-    const inviteMetadata = {
-      applicant_name: applicantName,
-      applicant_email: applicantEmail,
-      specialty_category: specialtyCategory,
-      specialty_category_id: String(payload.specialtyCategoryId ?? ''),
-      applicant_type: applicantType,
-      company_identifier: companyIdentifier,
-      reason,
-      submitted_by_email: submittedByEmail,
-      submitted_by_role: submittedByRole,
-    };
-
-    const adminSupabase = createClient(supabaseUrl, serviceRoleKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
+    await smtpTransport.sendMail({
+      from: `CULTURO BG <${smtpUser}>`,
+      to: adminEmail,
+      replyTo: applicantEmail || undefined,
+      subject: `Заявка за Special User: ${applicantName}`,
+      text: buildEmailText({
+        applicantName,
+        applicantEmail,
+        specialtyCategory,
+        applicantType,
+        companyIdentifier,
+        reason,
+        submittedByEmail,
+        submittedByRole,
+      }),
+      html: buildEmailHtml({
+        applicantName,
+        applicantEmail,
+        specialtyCategory,
+        applicantType,
+        companyIdentifier,
+        reason,
+        submittedByEmail,
+        submittedByRole,
+      }),
     });
 
-    const redirectTo = request.headers.get('origin') ? `${request.headers.get('origin')}/login` : undefined;
-    const notificationRecipients = collectNotificationRecipients(adminEmail);
-    let lastInviteError: Error | null = null;
-
-    for (const recipientEmail of notificationRecipients) {
-      const { error: inviteError } = await adminSupabase.auth.admin.inviteUserByEmail(recipientEmail, {
-        data: inviteMetadata,
-        redirectTo,
-      });
-
-      if (!inviteError) {
-        return jsonResponse(200, { ok: true });
-      }
-
-      lastInviteError = new Error(inviteError.message);
-    }
-
-    return jsonResponse(502, {
-      error: 'Failed to send upgrade request email.',
-      details: lastInviteError?.message ?? 'Unknown invite error.',
-    });
+    return jsonResponse(200, { ok: true });
   } catch (error) {
     const details = error instanceof Error ? error.message : String(error);
     return jsonResponse(500, {

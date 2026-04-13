@@ -204,7 +204,7 @@ const UserUpgradePopover: React.FC<{ user: AppUser }> = ({ user }) => {
         }
       }
 
-      message.success('Заявката е записана и е изпратена на администратора.');
+      message.success('Заявката е записана и е изпратена за одобрение на администратора.');
       setIsModalOpen(false);
       form.resetFields();
     } catch (error) {
