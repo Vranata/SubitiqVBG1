@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://culturobg.com/sitemap.xml
+Sitemap: https://frontend-culturo-bg.vercel.app/sitemap.xml

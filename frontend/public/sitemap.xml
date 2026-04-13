@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://culturobg.com/</loc>
+    <loc>https://frontend-culturo-bg.vercel.app/</loc>
   </url>
   <url>
-    <loc>https://culturobg.com/events</loc>
+    <loc>https://frontend-culturo-bg.vercel.app/events</loc>
   </url>
   <url>
-    <loc>https://culturobg.com/recommended</loc>
+    <loc>https://frontend-culturo-bg.vercel.app/recommended</loc>
   </url>
   <url>
-    <loc>https://culturobg.com/favorites</loc>
+    <loc>https://frontend-culturo-bg.vercel.app/favorites</loc>
   </url>
 </urlset>
