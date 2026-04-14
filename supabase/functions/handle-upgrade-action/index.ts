@@ -11,25 +11,21 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 const TEXTS = {
   success: 'Успешно',
   error: 'Грешка',
-  missingParams: 'Липсват задължителни параметри (action, requestId или userId).',
-  invalidAction: 'Невалидно действие. Използвайте approve или reject.',
-  notFound: 'Заявката не бе намерена в базата данни.',
-  alreadyProcessed: 'Тази заявка вече е била обработена.',
-  approved: 'Потребителят бе успешно повишен в Special User!',
-  rejected: 'Заявката бе успешно отхвърлена.',
-  dbError: 'Възникна техническа грешка при обновяване на базата данни.',
+  missingParams: 'Липсват задължителни параметри.',
+  notFound: 'Заявката не бе намерена.',
+  alreadyProcessed: 'Тази заявка Вече е била обработена.',
+  dbError: 'Възникна техническа грешка при запис в базата.',
 };
 
-function redirectResponse(type: 'success' | 'error' | 'info' | 'warning', text: string) {
+function redirectResponse(type: 'success' | 'error' | 'info' | 'warning', text: string, debug?: string) {
   const url = new URL(`${FRONTEND_URL}/admin-message`);
   url.searchParams.set('type', type);
   url.searchParams.set('text', text);
+  if (debug) url.searchParams.set('debug', debug);
   
   return new Response(null, {
     status: 302,
-    headers: {
-      'Location': url.toString(),
-    },
+    headers: { 'Location': url.toString() },
   });
 }
 
@@ -44,10 +40,6 @@ Deno.serve(async (req: Request) => {
       return redirectResponse('error', TEXTS.missingParams);
     }
 
-    if (action !== 'approve' && action !== 'reject') {
-      return redirectResponse('error', TEXTS.invalidAction);
-    }
-
     // 1. Fetch request details
     const { data: requestRow, error: fetchError } = await supabase
       .from('user_upgrade_requests')
@@ -56,53 +48,45 @@ Deno.serve(async (req: Request) => {
       .single();
 
     if (fetchError || !requestRow) {
-      console.error('Fetch request error:', fetchError);
       return redirectResponse('error', TEXTS.notFound);
     }
 
-    if (requestRow.status !== 'pending') {
-      return redirectResponse('info', `${TEXTS.alreadyProcessed} (${requestRow.status})`);
+    if (requestRow.status !== 'pending' && action !== 'reject') {
+      return redirectResponse('info', `${TEXTS.alreadyProcessed} (${requestRow.status})`, `User: ${authUserId}`);
     }
 
-    // 2. Perform action
     if (action === 'approve') {
-      console.log(`Approving user ${authUserId}...`);
-      
-      // We use UPSERT to handle cases where the user record might be missing in public.users
-      // but exists in auth.users. This ensures the user row is present and correct.
-      const { error: upgradeError } = await supabase
+       // Agressive Upsert: Try to identify by auth_user_id and ensure role is 2
+       const { error: upgradeError } = await supabase
         .from('users')
         .upsert({
           auth_user_id: authUserId,
           email: requestRow.applicant_email,
           name_user: requestRow.applicant_name,
-          id_category: 2, // Special User
-          id_region: 0,   // Default region if missing
-          password_hash: 'supabase_auth_managed_placeholder',
+          id_category: 2, // Special_user
+          id_region: 0,
+          password_hash: 'managed_by_auth',
           profile_onboarding_completed: true
         }, { onConflict: 'auth_user_id' });
 
       if (upgradeError) {
-        console.error('Upgrade error:', upgradeError);
-        return redirectResponse('error', `${TEXTS.dbError} (${upgradeError.message})`);
+        return redirectResponse('error', `${TEXTS.dbError}: ${upgradeError.message}`);
       }
     }
 
-    // 3. Update request status
-    const { error: updateError } = await supabase
+    // Update request status
+    await supabase
       .from('user_upgrade_requests')
       .update({ status: action === 'approve' ? 'approved' : 'rejected' })
       .eq('id_request', requestId);
 
-    if (updateError) {
-      console.error('Update request status error:', updateError);
-      return redirectResponse('error', `${TEXTS.dbError} (${updateError.message})`);
-    }
-
-    return redirectResponse('success', action === 'approve' ? TEXTS.approved : TEXTS.rejected);
+    const successMsg = action === 'approve' 
+      ? `Потребителят ${requestRow.applicant_email} е одобрен!` 
+      : 'Заявката е отхвърлена.';
+      
+    return redirectResponse('success', successMsg, `ID: ${authUserId} | Email: ${requestRow.applicant_email}`);
 
   } catch (err: any) {
-    console.error('Unexpected error:', err);
     return redirectResponse('error', err.message || String(err));
   }
 });
