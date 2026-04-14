@@ -241,7 +241,7 @@ const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
       onCancel={onClose}
       footer={null}
       width={600}
-      destroyOnClose
+      destroyOnHidden
     >
       <div style={{ padding: '10px 0' }}>
         <Typography.Paragraph type="secondary">

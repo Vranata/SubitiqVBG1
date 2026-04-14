@@ -324,8 +324,10 @@ const App: React.FC = () => {
           placement="right"
           onClose={() => setIsMobileDrawerOpen(false)}
           open={isMobileDrawerOpen}
-          styles={{ body: { padding: 0, background: 'var(--header-bg)' }, header: { background: 'var(--header-bg)', borderBottom: '1px solid var(--border-color)' } }}
-          headerStyle={{ color: 'var(--header-text)' }}
+          styles={{ 
+            body: { padding: 0, background: 'var(--header-bg)' }, 
+            header: { background: 'var(--header-bg)', borderBottom: '1px solid var(--border-color)', color: 'var(--header-text)' } 
+          }}
           width={280}
         >
           <div style={{ padding: '24px 16px' }}>

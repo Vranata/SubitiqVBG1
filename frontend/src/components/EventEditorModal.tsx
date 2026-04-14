@@ -99,7 +99,7 @@ const EventEditorModal: React.FC<EventEditorModalProps> = ({
       confirmLoading={loading}
       onOk={() => form.submit()}
       onCancel={onCancel}
-      destroyOnClose
+      destroyOnHidden
       width={760}
     >
       {errorMessage ? (

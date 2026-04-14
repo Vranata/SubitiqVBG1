@@ -348,7 +348,7 @@ const UserUpgradePopover: React.FC<UserUpgradePopoverProps> = ({ user, variant =
         title="Заявка за Upgrade към Special User"
         okText="Изпрати"
         cancelText="Отказ"
-        destroyOnClose
+        destroyOnHidden
         confirmLoading={isSubmitting}
         onCancel={handleCloseModal}
         onOk={() => form.submit()}
