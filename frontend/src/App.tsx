@@ -2,9 +2,20 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Route, Link } from 'atomic-router-react';
 import { useUnit } from 'effector-react';
 import { Button, ConfigProvider, Layout, Tooltip, theme as antdTheme } from 'antd';
-import { BgColorsOutlined, CalendarOutlined, HeartOutlined, HomeOutlined, LoginOutlined, LogoutOutlined, MoonOutlined, StarOutlined, SunOutlined } from '@ant-design/icons';
+import { 
+  BgColorsOutlined, 
+  CalendarOutlined, 
+  HeartOutlined, 
+  HomeOutlined, 
+  LoginOutlined, 
+  LogoutOutlined, 
+  MoonOutlined, 
+  StarOutlined, 
+  SunOutlined,
+  UserOutlined
+} from '@ant-design/icons';
 import { history, routes } from './shared/routing';
-import { $isAuthenticated, $user, signOutFx } from './entities/model';
+import { $isAuthenticated, $user, $isAdmin, signOutFx } from './entities/model';
 import UserUpgradePopover from './components/UserUpgradePopover';
 import './theme.css';
 
@@ -15,6 +26,7 @@ import Favorites from './pages/Favorites/index';
 import Login from './pages/Login/index';
 import Recommended from './pages/Recommended/index';
 import AdminMessage from './pages/AdminMessage/index';
+import AdminUsers from './pages/AdminUsers/index';
 import LocationInitializer from './components/LocationInitializer';
 
 const { Header, Content, Footer } = Layout;
@@ -30,42 +42,23 @@ const getRouteKey = (pathname: string) => {
   if (pathname === '/favorites') return 'favorites';
   if (pathname === '/login') return 'login';
   if (pathname === '/admin-result') return 'admin-result';
+  if (pathname === '/admin/users') return 'admin-users';
   return 'home';
 };
 
-const navigationItems = [
-  {
-    key: 'home',
-    icon: <HomeOutlined />,
-    to: routes.home,
-    label: 'Начало',
-  },
-  {
-    key: 'events',
-    icon: <CalendarOutlined />,
-    to: routes.events,
-    label: 'Всички събития',
-  },
-  {
-    key: 'recommended',
-    icon: <StarOutlined />,
-    to: routes.recommended,
-    label: 'Препоръчано за теб',
-  },
-  {
-    key: 'favorites',
-    icon: <HeartOutlined />,
-    to: routes.favorites,
-    label: 'Любими',
-  },
-];
+interface NavigationItem {
+  key: string;
+  icon: React.ReactNode;
+  to: any;
+  label: string;
+}
 
-const SidebarNavigation: React.FC<{ themeMode: ThemeMode; selectedKey: string; compact?: boolean }> = ({ themeMode, selectedKey, compact = false }) => {
+const SidebarNavigation: React.FC<{ themeMode: ThemeMode; selectedKey: string; items: NavigationItem[]; compact?: boolean }> = ({ themeMode, selectedKey, items, compact = false }) => {
   const isDark = themeMode === 'dark';
 
   return (
     <nav className={compact ? 'app-navigation app-navigation-compact' : 'app-navigation'} data-theme={isDark ? 'dark' : 'light'} aria-label="Основна навигация">
-      {navigationItems.map((item) => (
+      {items.map((item) => (
         <Link
           key={item.key}
           to={item.to}
@@ -113,13 +106,56 @@ const getThemeConfig = (mode: ThemeMode) => {
 const App: React.FC = () => {
   const [themeMode, setThemeMode] = useState<ThemeMode>('light');
   const [selectedKey, setSelectedKey] = useState(() => getRouteKey(typeof window !== 'undefined' ? window.location.pathname : '/'));
-  const { isAuthenticated, signOut, user } = useUnit({
+  
+  const { isAuthenticated, signOut, user, isAdmin } = useUnit({
     isAuthenticated: $isAuthenticated,
     user: $user,
     signOut: signOutFx,
+    isAdmin: $isAdmin,
   });
 
+  const activeNavigationItems = useMemo<NavigationItem[]>(() => {
+    const baseItems: NavigationItem[] = [
+      {
+        key: 'home',
+        icon: <HomeOutlined />,
+        to: routes.home,
+        label: 'Начало',
+      },
+      {
+        key: 'events',
+        icon: <CalendarOutlined />,
+        to: routes.events,
+        label: 'Всички събития',
+      },
+      {
+        key: 'recommended',
+        icon: <StarOutlined />,
+        to: routes.recommended,
+        label: 'Препоръчано за теб',
+      },
+      {
+        key: 'favorites',
+        icon: <HeartOutlined />,
+        to: routes.favorites,
+        label: 'Любими',
+      },
+    ];
+
+    if (isAdmin) {
+      baseItems.push({
+        key: 'admin-users',
+        icon: <UserOutlined />,
+        to: routes.adminUsers,
+        label: 'Управление',
+      });
+    }
+
+    return baseItems;
+  }, [isAdmin]);
+
   const themeConfig = useMemo(() => getThemeConfig(themeMode), [themeMode]);
+  
   const cycleTheme = () => {
     const nextIndex = (themeOrder.indexOf(themeMode) + 1) % themeOrder.length;
     setThemeMode(themeOrder[nextIndex]);
@@ -174,7 +210,7 @@ const App: React.FC = () => {
           </div>
 
           <div className="header-navigation-shell">
-            <SidebarNavigation themeMode={themeMode} selectedKey={selectedKey} compact />
+            <SidebarNavigation themeMode={themeMode} selectedKey={selectedKey} items={activeNavigationItems} compact />
           </div>
 
           <div style={{ flex: 1 }} />
@@ -245,6 +281,7 @@ const App: React.FC = () => {
               <Route route={routes.eventDetails} view={EventDetails} />
               <Route route={routes.login} view={Login} />
               <Route route={routes.adminMessage} view={AdminMessage} />
+              <Route route={routes.adminUsers} view={AdminUsers} />
             </div>
           </Content>
         </Layout>

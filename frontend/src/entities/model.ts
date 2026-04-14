@@ -202,6 +202,26 @@ export const startAuthSyncFx = createEffect(() => {
 const checkSessionFx = createEffect(async () => getSession());
 export const refreshUserProfileFx = createEffect(async (): Promise<AppUser | null> => loadUserProfileBySession(await getSession()));
 
+export const fetchSpecialUsersFx = createEffect(async (): Promise<AppUser[]> => {
+  const { data, error } = await supabase
+    .from('users')
+    .select('id_user, auth_user_id, email, name_user, id_category, picture, id_region, phone_user, biogr_user, profile_onboarding_completed, user_category:id_category ( id_category, name_category, note_category_user )')
+    .eq('id_category', 2); // Special_user
+
+  if (error) throw error;
+  return (data || []).map(mapUserRow);
+});
+
+export const downgradeUserFx = createEffect(async ({ userId, confirmEmail }: { userId: string; confirmEmail: string }) => {
+  const { data, error } = await supabase.functions.invoke('handle-role-downgrade', {
+    body: { userId, confirmEmail }
+  });
+
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+  return data;
+});
+
 export const $user = createStore<AppUser | null>(null)
   .on(loadUserProfileFx.doneData, (_, user) => user)
   .on(refreshUserProfileFx.doneData, (_, user) => user);
@@ -211,6 +231,10 @@ export const $userRole = $user.map((user) => user?.roleName ?? null);
 export const $isAdmin = $userRole.map((role) => role === 'Administrator');
 export const $isSpecialUser = $userRole.map((role) => role === 'Special_user');
 export const $isRegularUser = $userRole.map((role) => role === 'User');
+
+export const $specialUsers = createStore<AppUser[]>([])
+  .on(fetchSpecialUsersFx.doneData, (_, users) => users)
+  .on(downgradeUserFx.done, (users, { params }) => users.filter(u => u.id !== params.userId));
 
 sample({
   clock: checkSession,
@@ -257,4 +281,11 @@ sample({
   filter: (isAuthenticated: boolean) => isAuthenticated && !isRecoveryRoute(),
   fn: () => undefined,
   target: goHome,
+});
+
+sample({
+  clock: routes.adminUsers.opened,
+  source: $isAdmin,
+  filter: (isAdmin) => isAdmin,
+  target: fetchSpecialUsersFx,
 });
