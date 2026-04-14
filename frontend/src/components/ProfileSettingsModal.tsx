@@ -104,22 +104,24 @@ const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
       return;
     }
 
-    console.log('[Preferences] Modal opened, loading preferences...');
+    console.log('[Preferences] Modal opened, loading preferences...', {
+      categoriesCount: availableCategories.length,
+      authUserId: user.authUserId
+    });
 
     const loadProfilePreferences = async () => {
-      // Small delay to ensure the form is fully connected after destroyOnClose recreation
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      // Small delay to ensure the form is fully connected
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       const currentUserDbId = await resolveCurrentUserDbId();
 
       if (currentUserDbId === null) {
-        console.warn('[Preferences] No user DB id found, setting empty categories');
+        console.warn('[Preferences] No user DB id found, setting default values');
         form.setFieldsValue({
           name: user.name,
           email: user.email,
           categoryIds: [],
         });
-
         return;
       }
 
@@ -130,29 +132,30 @@ const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
         .eq('id_user', currentUserDbId);
 
       if (error) {
-        console.warn('[Preferences] Failed to load preferences:', error);
-
+        console.error('[Preferences] Failed to load preferences:', error);
         form.setFieldsValue({
           name: user.name,
           email: user.email,
           categoryIds: [],
         });
-
         return;
       }
 
       const selectedCategoryIds = (data ?? []).map((row) => String(row.id_event_category));
-      console.log('[Preferences] Loaded categories:', selectedCategoryIds);
+      console.log('[Preferences] Loaded categories from DB:', selectedCategoryIds);
 
+      // Force a re-render/re-sync by ensuring we have categories loaded
       form.setFieldsValue({
         name: user.name,
         email: user.email,
         categoryIds: selectedCategoryIds,
       });
+
+      console.log('[Preferences] Form fields set.');
     };
 
     void loadProfilePreferences().catch((error) => {
-      console.error('[Preferences] loadProfilePreferences error:', error);
+      console.error('[Preferences] Error in loadProfilePreferences:', error);
       message.error(error instanceof Error ? error.message : 'Неуспешно зареждане на профила.');
     });
 
@@ -160,7 +163,7 @@ const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
     setIsPasswordChangeVisible(false);
     setIsSendingEmailChange(false);
     setIsSendingPasswordReset(false);
-  }, [form, open, user.email, user.id, user.name]);
+  }, [form, open, user.email, user.id, user.name, availableCategories]);
 
   const persistCategoryPreferences = async (categoryIds: string[]) => {
     const currentUserDbId = await resolveCurrentUserDbId();

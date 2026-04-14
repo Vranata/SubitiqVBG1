@@ -5,66 +5,56 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-// HTML entity encoded Bulgarian strings (encoding-safe for any runtime)
-const TEXTS = {
-  // Успешно
-  success: '&#1059;&#1089;&#1087;&#1077;&#1096;&#1085;&#1086;',
-  // Грешка
-  error: '&#1043;&#1088;&#1077;&#1096;&#1082;&#1072;',
-  // Можете да затворите този прозорец.
-  closeWindow: '&#1052;&#1086;&#1078;&#1077;&#1090;&#1077; &#1076;&#1072; &#1079;&#1072;&#1090;&#1074;&#1086;&#1088;&#1080;&#1090;&#1077; &#1090;&#1086;&#1079;&#1080; &#1087;&#1088;&#1086;&#1079;&#1086;&#1088;&#1077;&#1094;.',
-  // Липсват задължителни параметри (action, request_id или auth_user_id).
-  missingParams: '&#1051;&#1080;&#1087;&#1089;&#1074;&#1072;&#1090; &#1079;&#1072;&#1076;&#1098;&#1083;&#1078;&#1080;&#1090;&#1077;&#1083;&#1085;&#1080; &#1087;&#1072;&#1088;&#1072;&#1084;&#1077;&#1090;&#1088;&#1080; (action, request_id &#1080;&#1083;&#1080; auth_user_id).',
-  // Невалидно действие. Използвайте approve или reject.
-  invalidAction: '&#1053;&#1077;&#1074;&#1072;&#1083;&#1080;&#1076;&#1085;&#1086; &#1076;&#1077;&#1081;&#1089;&#1090;&#1074;&#1080;&#1077;. &#1048;&#1079;&#1087;&#1086;&#1083;&#1079;&#1074;&#1072;&#1081;&#1090;&#1077; approve &#1080;&#1083;&#1080; reject.',
-  // Не може да бъде намерена заявката. Възможно е да е била изтрита.
-  notFound: '&#1053;&#1077; &#1084;&#1086;&#1078;&#1077; &#1076;&#1072; &#1073;&#1098;&#1076;&#1077; &#1085;&#1072;&#1084;&#1077;&#1088;&#1077;&#1085;&#1072; &#1079;&#1072;&#1103;&#1074;&#1082;&#1072;&#1090;&#1072;. &#1042;&#1098;&#1079;&#1084;&#1086;&#1078;&#1085;&#1086; &#1077; &#1076;&#1072; &#1077; &#1073;&#1080;&#1083;&#1072; &#1080;&#1079;&#1090;&#1088;&#1080;&#1090;&#1072;.',
-  // Тази заявка вече е обработена
-  alreadyProcessed: '&#1058;&#1072;&#1079;&#1080; &#1079;&#1072;&#1103;&#1074;&#1082;&#1072; &#1074;&#1077;&#1095;&#1077; &#1077; &#1086;&#1073;&#1088;&#1072;&#1073;&#1086;&#1090;&#1077;&#1085;&#1072;',
-  // текущ статус
-  currentStatus: '&#1090;&#1077;&#1082;&#1091;&#1097; &#1089;&#1090;&#1072;&#1090;&#1091;&#1089;',
-  // Грешка при обновяване на ролята
-  upgradeError: '&#1043;&#1088;&#1077;&#1096;&#1082;&#1072; &#1087;&#1088;&#1080; &#1086;&#1073;&#1085;&#1086;&#1074;&#1103;&#1074;&#1072;&#1085;&#1077; &#1085;&#1072; &#1088;&#1086;&#1083;&#1103;&#1090;&#1072;',
-  // Грешка при промяна на статуса
-  statusError: '&#1043;&#1088;&#1077;&#1096;&#1082;&#1072; &#1087;&#1088;&#1080; &#1087;&#1088;&#1086;&#1084;&#1103;&#1085;&#1072; &#1085;&#1072; &#1089;&#1090;&#1072;&#1090;&#1091;&#1089;&#1072;',
-  // Потребителят е успешно повишен до Special User! Статусът на заявката е обновен.
-  approved: '&#1055;&#1086;&#1090;&#1088;&#1077;&#1073;&#1080;&#1090;&#1077;&#1083;&#1103;&#1090; &#1077; &#1091;&#1089;&#1087;&#1077;&#1096;&#1085;&#1086; &#1087;&#1086;&#1074;&#1080;&#1096;&#1077;&#1085; &#1076;&#1086; Special User! &#1057;&#1090;&#1072;&#1090;&#1091;&#1089;&#1098;&#1090; &#1085;&#1072; &#1079;&#1072;&#1103;&#1074;&#1082;&#1072;&#1090;&#1072; &#1077; &#1086;&#1073;&#1085;&#1086;&#1074;&#1077;&#1085;.',
-  // Заявката е отхвърлена успешно.
-  rejected: '&#1047;&#1072;&#1103;&#1074;&#1082;&#1072;&#1090;&#1072; &#1077; &#1086;&#1090;&#1093;&#1074;&#1098;&#1088;&#1083;&#1077;&#1085;&#1072; &#1091;&#1089;&#1087;&#1077;&#1096;&#1085;&#1086;.',
-  // Неочаквана грешка
-  unexpected: '&#1053;&#1077;&#1086;&#1095;&#1072;&#1082;&#1074;&#1072;&#1085;&#1072; &#1075;&#1088;&#1077;&#1096;&#1082;&#1072;',
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const htmlResponse = (msg: string, isError = false) => {
-  const color = isError ? '#dc3545' : '#28a745';
-  const title = isError ? TEXTS.error : TEXTS.success;
-  const html = `<!DOCTYPE html>
+// HTML entities for Bulgarian text to avoid any encoding issues
+const TEXTS = {
+  success: '&#1059;&#1089;&#1087;&#1077;&#1096;&#1085;&#1086;', // Успешно
+  error: '&#1043;&#1088;&#1077;&#1096;&#1082;&#1072;', // Грешка
+  closeWindow: '&#1052;&#1086;&#1078;&#1077;&#1090;&#1077; &#1076;&#1072; &#1079;&#1072;&#1090;&#1074;&#1086;&#1088;&#1080;&#1090;&#1077; &#1090;&#1086;&#1079;&#1080; &#1087;&#1088;&#1086;&#1079;&#1086;&#1088;&#1077;&#1094;.', // Можете да затворите този прозорец.
+  missingParams: '&#1051;&#1080;&#1087;&#1089;&#1074;&#1072;&#1090; &#1079;&#1072;&#1076;&#1098;&#1083;&#1078;&#1080;&#1090;&#1077;&#1083;&#1085;&#1080; &#1087;&#1072;&#1088;&#1072;&#1084;&#1077;&#1090;&#1088;&#1080;.', // Липсват задължителни параметри.
+  invalidAction: '&#1053;&#1077;&#1074;&#1072;&#1083;&#1080;&#1076;&#1085;&#1086; &#1076;&#1077;&#1081;&#1089;&#1090;&#1074;&#1080;&#1077;.', // Невалидно действие.
+  notFound: '&#1047;&#1072;&#1103;&#1074;&#1082;&#1072;&#1090;&#1072; &#1085;&#1077; &#1077; &#1085;&#1072;&#1084;&#1077;&#1088;&#1077;&#1085;&#1072;.', // Заявката не е намерена.
+  alreadyProcessed: '&#1042;&#1077;&#1095;&#1077; &#1086;&#1073;&#1088;&#1072;&#1073;&#1086;&#1090;&#1077;&#1085;&#1072;.', // Вече обработена.
+  approved: '&#1055;&#1086;&#1090;&#1088;&#1077;&#1073;&#1080;&#1090;&#1077;&#1083;&#1103;&#1090; &#1077; Special User!', // Потребителят е Special User!
+  rejected: '&#1047;&#1072;&#1103;&#1074;&#1082;&#1072;&#1090;&#1072; &#1077; &#1086;&#1090;&#1093;&#1074;&#1098;&#1088;&#1083;&#1077;&#1085;&#1072;.' // Заявката е отхвърлена.
+};
+
+function buildHtml(titleEmoji: string, title: string, message: string) {
+  return `<!DOCTYPE html>
 <html lang="bg">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CULTURO BG Administration</title>
-<style>
-body{font-family:system-ui,-apple-system,sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background-color:#f8f9fa}
-.card{background:#fff;padding:30px;border-radius:10px;box-shadow:0 4px 6px rgba(0,0,0,.1);text-align:center;max-width:500px}
-h1{color:${color};margin-top:0}
-p{color:#555}
-</style>
+  <meta charset="UTF-8">
+  <title>CULTURO Administration</title>
+  <style>
+    body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: #f0f2f5; }
+    .card { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.15); text-align: center; max-width: 400px; width: 90%; }
+    .emoji { font-size: 3rem; margin-bottom: 1rem; }
+    h1 { margin: 0; color: #1a1a1a; font-size: 1.5rem; }
+    p { color: #4b5563; margin-top: 1rem; line-height: 1.5; }
+    .footer { font-size: 0.8rem; color: #9ca3af; margin-top: 2rem; }
+  </style>
 </head>
 <body>
-<div class="card">
-<h1>${title}</h1>
-<p>${msg}</p>
-<p style="margin-top:30px;font-size:12px;color:#aaa">${TEXTS.closeWindow}</p>
-</div>
+  <div class="card">
+    <div class="emoji">${titleEmoji}</div>
+    <h1>${title}</h1>
+    <p>${message}</p>
+    <div class="footer">${TEXTS.closeWindow}</div>
+  </div>
 </body>
 </html>`;
-  return new Response(html, {
-    headers: { 'Content-Type': 'text/html; charset=utf-8' },
-  });
-};
+}
 
-Deno.serve(async (req: Request) => {
+Deno.serve(async (req) => {
+  // CORS check for pre-flight
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
   try {
     const url = new URL(req.url);
     const action = url.searchParams.get('action');
@@ -72,13 +62,16 @@ Deno.serve(async (req: Request) => {
     const authUserId = url.searchParams.get('auth_user_id');
 
     if (!action || !requestId || !authUserId) {
-      return htmlResponse(TEXTS.missingParams, true);
+      const html = buildHtml('⚠️', TEXTS.error, TEXTS.missingParams);
+      return new Response(html, { headers: { ...corsHeaders, 'Content-Type': 'text/html; charset=UTF-8' } });
     }
 
     if (action !== 'approve' && action !== 'reject') {
-      return htmlResponse(TEXTS.invalidAction, true);
+      const html = buildHtml('❌', TEXTS.error, TEXTS.invalidAction);
+      return new Response(html, { headers: { ...corsHeaders, 'Content-Type': 'text/html; charset=UTF-8' } });
     }
 
+    // Check request
     const { data: requestRow, error: fetchError } = await supabase
       .from('user_upgrade_requests')
       .select('status')
@@ -86,11 +79,13 @@ Deno.serve(async (req: Request) => {
       .single();
 
     if (fetchError || !requestRow) {
-      return htmlResponse(TEXTS.notFound, true);
+      const html = buildHtml('❓', TEXTS.error, TEXTS.notFound);
+      return new Response(html, { headers: { ...corsHeaders, 'Content-Type': 'text/html; charset=UTF-8' } });
     }
 
     if (requestRow.status !== 'pending') {
-      return htmlResponse(`${TEXTS.alreadyProcessed} (${TEXTS.currentStatus}: ${requestRow.status}).`, true);
+      const html = buildHtml('ℹ️', TEXTS.success, `${TEXTS.alreadyProcessed} (${requestRow.status})`);
+      return new Response(html, { headers: { ...corsHeaders, 'Content-Type': 'text/html; charset=UTF-8' } });
     }
 
     if (action === 'approve') {
@@ -100,22 +95,22 @@ Deno.serve(async (req: Request) => {
         .eq('auth_user_id', authUserId);
 
       if (upgradeError) {
-        return htmlResponse(`${TEXTS.upgradeError}: ${upgradeError.message}`, true);
+        const html = buildHtml('❌', TEXTS.error, upgradeError.message);
+        return new Response(html, { headers: { ...corsHeaders, 'Content-Type': 'text/html; charset=UTF-8' } });
       }
     }
 
-    const { error: statusError } = await supabase
+    // Update status
+    await supabase
       .from('user_upgrade_requests')
       .update({ status: action === 'approve' ? 'approved' : 'rejected' })
       .eq('id_request', requestId);
 
-    if (statusError) {
-      return htmlResponse(`${TEXTS.statusError}: ${statusError.message}`, true);
-    }
+    const html = buildHtml('✅', TEXTS.success, action === 'approve' ? TEXTS.approved : TEXTS.rejected);
+    return new Response(html, { headers: { ...corsHeaders, 'Content-Type': 'text/html; charset=UTF-8' } });
 
-    return htmlResponse(action === 'approve' ? TEXTS.approved : TEXTS.rejected);
-
-  } catch (error) {
-    return htmlResponse(`${TEXTS.unexpected}: ${error instanceof Error ? error.message : String(error)}`, true);
+  } catch (err: any) {
+    const html = buildHtml('💥', TEXTS.error, err.message || String(err));
+    return new Response(html, { headers: { ...corsHeaders, 'Content-Type': 'text/html; charset=UTF-8' } });
   }
 });
