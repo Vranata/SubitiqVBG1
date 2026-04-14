@@ -25,13 +25,13 @@ const Home: React.FC = () => {
 
       {featuredEvents.length > 0 && (
         <div style={{ marginTop: '64px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '32px' }}>
+          <div className="home-section-header">
             <div>
               <Title level={2} style={{ marginBottom: '8px', color: 'var(--text-primary)' }}>Избрано за вас</Title>
               <Text type="secondary">Най-интересните предстоящи събития, подбрани специално за теб.</Text>
             </div>
             <Link to={routes.events}>
-              <Button type="link" size="large">Виж всички събития <ArrowRightOutlined /></Button>
+              <Button type="link" size="large" className="home-section-button">Виж всички събития <ArrowRightOutlined /></Button>
             </Link>
           </div>
 

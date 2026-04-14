@@ -923,6 +923,29 @@
 }
 
 /* Mobile adjustments for specific components */
+.home-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 32px;
+  gap: 16px;
+}
+
+.home-section-header .ant-typography {
+  margin-bottom: 0 !important;
+}
+
+@media (max-width: 640px) {
+  .home-section-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .home-section-button {
+    padding-left: 0 !important;
+  }
+}
+
 @media (max-width: 640px) {
   .home-hero {
     padding: 20px;
