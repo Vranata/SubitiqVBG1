@@ -2,12 +2,13 @@ import React, { useEffect } from 'react';
 import { Button, Result, Typography, Card, Descriptions, Divider, Space, Alert } from 'antd';
 import { useUnit } from 'effector-react';
 import { history } from '../../shared/routing';
-import { $user, refreshUserProfile } from '../../entities/model';
+import { $user, $isAdmin, refreshUserProfile } from '../../entities/model';
 import { ReloadOutlined } from '@ant-design/icons';
 
 const AdminMessage: React.FC = () => {
-  const { user, refresh } = useUnit({
+  const { user, isAdmin, refresh } = useUnit({
     user: $user,
+    isAdmin: $isAdmin,
     refresh: refreshUserProfile,
   });
 
@@ -52,15 +53,6 @@ const AdminMessage: React.FC = () => {
           ]}
         />
 
-        {type === 'success' && !idsMatch && user && (
-          <Alert
-            message="Внимание: Разминаване в акаунтите"
-            description="Изглежда, че сте логнати с различен акаунт от този, който току-що одобрихте. Проверете Auth ID-тата по-долу."
-            type="warning"
-            showIcon
-            style={{ marginBottom: '20px' }}
-          />
-        )}
 
         <Divider>Сравнителна Диагностика</Divider>
         <Descriptions bordered column={1} size="small">
@@ -83,9 +75,11 @@ const AdminMessage: React.FC = () => {
             {!user ? (
               <Typography.Text type="secondary">Изчакване на логин...</Typography.Text>
             ) : idsMatch ? (
-              <Typography.Text type="success" strong>Одобрявате вашия собствен акаунт ✅</Typography.Text>
+              <Typography.Text style={{ color: '#faad14' }} strong>Обновяване на личен профил (Самодиагностика) ⚠️</Typography.Text>
+            ) : isAdmin ? (
+              <Typography.Text type="success" strong>Одобрение на друг потребител (Стандартен административен поток) ✅</Typography.Text>
             ) : (
-              <Typography.Text type="danger" strong>Одобрявате ДРУГ акаунт ❌</Typography.Text>
+              <Typography.Text type="danger" strong>Разминаване: Вие не сте администратор на този акаунт ❌</Typography.Text>
             )}
           </Descriptions.Item>
 
