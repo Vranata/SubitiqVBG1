@@ -70,6 +70,14 @@ const isRecoveryRoute = () => {
   return new URLSearchParams(window.location.search).get('mode') === 'recovery';
 };
 
+const isAdminResultRoute = () => {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  return window.location.pathname === '/admin-result';
+};
+
 const buildFallbackUser = (session: Session): AppUser => ({
   id: session.user.id,
   authUserId: session.user.id,
@@ -264,7 +272,9 @@ sample({
 
 sample({
   clock: loadUserProfileFx.doneData,
-  filter: (user: AppUser | null): user is AppUser => Boolean(user) && !isRecoveryRoute(),
+  filter: (user: AppUser | null): user is AppUser => {
+    return Boolean(user) && !isRecoveryRoute() && !isAdminResultRoute();
+  },
   fn: () => undefined,
   target: goHome,
 });
