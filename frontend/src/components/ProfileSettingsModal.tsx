@@ -53,6 +53,7 @@ const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
   const availableCategories = useMemo(() => (categoryOptions.length > 0 ? categoryOptions : fallbackCategoryOptions), [categoryOptions]);
 
   const resolveCurrentUserDbId = async () => {
+    console.log('[Preferences] resolveCurrentUserDbId: querying for auth_user_id =', user.authUserId);
     const { data, error } = await supabase
       .from('users')
       .select('id_user')
@@ -60,28 +61,33 @@ const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
       .maybeSingle<UserRowId>();
 
     if (error) {
+      console.error('[Preferences] resolveCurrentUserDbId: query error', error);
       throw error;
     }
 
     if (data?.id_user) {
+      console.log('[Preferences] resolveCurrentUserDbId: found id_user =', data.id_user);
       return data.id_user;
     }
 
     // Fallback: If user row doesn't exist (e.g. registered before trigger added), create it
+    console.warn('[Preferences] resolveCurrentUserDbId: user row not found, creating via upsert...');
     const { data: upsertData, error: upsertError } = await supabase.from('users').upsert({
       auth_user_id: user.authUserId,
       email: user.email,
       name_user: user.name,
       id_category: 1,
+      password_hash: 'supabase_auth_managed_placeholder',
       id_region: 0,
       profile_onboarding_completed: false
     }, { onConflict: 'auth_user_id' }).select('id_user').single();
 
     if (upsertError) {
-      console.error('Failed to implicitly create user row:', upsertError);
+      console.error('[Preferences] resolveCurrentUserDbId: upsert failed', upsertError);
       return null;
     }
 
+    console.log('[Preferences] resolveCurrentUserDbId: upsert created id_user =', upsertData?.id_user);
     return upsertData?.id_user ?? null;
   };
 
@@ -90,10 +96,16 @@ const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
       return;
     }
 
+    console.log('[Preferences] Modal opened, loading preferences...');
+
     const loadProfilePreferences = async () => {
+      // Small delay to ensure the form is fully connected after destroyOnClose recreation
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
       const currentUserDbId = await resolveCurrentUserDbId();
 
       if (currentUserDbId === null) {
+        console.warn('[Preferences] No user DB id found, setting empty categories');
         form.setFieldsValue({
           name: user.name,
           email: user.email,
@@ -103,13 +115,14 @@ const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
         return;
       }
 
+      console.log('[Preferences] Querying user_likings for id_user =', currentUserDbId);
       const { data, error } = await supabase
         .from('user_likings')
         .select('id_event_category')
         .eq('id_user', currentUserDbId);
 
       if (error) {
-        console.warn('Failed to load profile preferences.', error);
+        console.warn('[Preferences] Failed to load preferences:', error);
 
         form.setFieldsValue({
           name: user.name,
@@ -121,6 +134,7 @@ const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
       }
 
       const selectedCategoryIds = (data ?? []).map((row) => String(row.id_event_category));
+      console.log('[Preferences] Loaded categories:', selectedCategoryIds);
 
       form.setFieldsValue({
         name: user.name,
@@ -130,6 +144,7 @@ const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
     };
 
     void loadProfilePreferences().catch((error) => {
+      console.error('[Preferences] loadProfilePreferences error:', error);
       message.error(error instanceof Error ? error.message : 'Неуспешно зареждане на профила.');
     });
 
@@ -143,19 +158,24 @@ const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
     const currentUserDbId = await resolveCurrentUserDbId();
 
     if (currentUserDbId === null) {
+      console.error('[Preferences] Cannot persist: no user DB id');
       return;
     }
 
+    console.log('[Preferences] Deleting old likings for id_user =', currentUserDbId);
     const deleteResult = await supabase.from('user_likings').delete().eq('id_user', currentUserDbId);
 
     if (deleteResult.error) {
+      console.error('[Preferences] Delete failed:', deleteResult.error);
       throw deleteResult.error;
     }
 
     if (categoryIds.length === 0) {
+      console.log('[Preferences] No categories to insert, done.');
       return;
     }
 
+    console.log('[Preferences] Inserting new likings:', categoryIds);
     const insertResult = await supabase.from('user_likings').insert(
       categoryIds.map((categoryId) => ({
         id_user: currentUserDbId,
@@ -164,8 +184,10 @@ const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
     );
 
     if (insertResult.error) {
+      console.error('[Preferences] Insert failed:', insertResult.error);
       throw insertResult.error;
     }
+    console.log('[Preferences] Preferences saved successfully!');
   };
 
   const markOnboardingCompleted = async () => {
