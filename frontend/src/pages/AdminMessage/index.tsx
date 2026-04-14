@@ -69,11 +69,20 @@ const AdminMessage: React.FC = () => {
           </Descriptions.Item>
           
           <Descriptions.Item label="Твоето ID (Сесия в браузъра)">
-            <Typography.Text code copyable>{user?.authUserId || 'Не сте логнати'}</Typography.Text>
+            {user ? (
+              <Typography.Text code copyable>{user.authUserId}</Typography.Text>
+            ) : (
+              <Space>
+                <Typography.Text type="danger">Не сте логнати!</Typography.Text>
+                <Button type="link" size="small" onClick={() => history.push('/login')}>Влезте тук</Button>
+              </Space>
+            )}
           </Descriptions.Item>
           
           <Descriptions.Item label="Статус на съвпадение">
-            {idsMatch ? (
+            {!user ? (
+              <Typography.Text type="secondary">Изчакване на логин...</Typography.Text>
+            ) : idsMatch ? (
               <Typography.Text type="success" strong>Одобрявате вашия собствен акаунт ✅</Typography.Text>
             ) : (
               <Typography.Text type="danger" strong>Одобрявате ДРУГ акаунт ❌</Typography.Text>

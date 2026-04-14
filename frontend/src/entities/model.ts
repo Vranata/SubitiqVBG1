@@ -89,13 +89,20 @@ const mapUserRow = (row: UserRow): AppUser => {
   const userCategory = row.user_category?.[0] ?? null;
   const bootstrapAdmin = isBootstrapAdminEmail(row.email);
 
+  // Robust mapping: Use Join data if available, fallback to ID mapping, then default to 'User'
+  const roleName: UserRole = bootstrapAdmin 
+    ? 'Administrator' 
+    : (userCategory?.name_category || 
+       (row.id_category === 2 ? 'Special_user' : 
+        row.id_category === 3 ? 'Administrator' : 'User'));
+
   return {
     id: String(row.id_user),
     authUserId: row.auth_user_id,
     email: row.email,
     name: row.name_user,
     roleId: bootstrapAdmin ? 3 : (userCategory?.id_category ?? row.id_category),
-    roleName: bootstrapAdmin ? 'Administrator' : (userCategory?.name_category ?? 'User'),
+    roleName,
     roleNote: bootstrapAdmin ? roleFallbacks.Administrator.note : (userCategory?.note_category_user ?? roleFallbacks.User.note),
     picture: row.picture,
     regionId: row.id_region,
