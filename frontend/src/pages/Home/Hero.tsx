@@ -20,10 +20,10 @@ const Hero: React.FC = () => {
       <div className="home-hero-copy">
         <div className="home-hero-kicker">CULTURO BG · ИЗБРАНО ДНЕС</div>
         <Title level={1} className="home-hero-title">
-          Събития за твоя град, подредени като афиш.
+          Културният пулс на твоя град в един афиш.
         </Title>
         <Paragraph className="home-hero-text">
-          Кратък, редакторски първи екран с city-first фокус, категории и подбрани предложения. Без цена, без излишен шум, без да губиш вниманието си.
+          Откривай, планирай и преживявай най-интересните събития – от интимни концерти до мащабни фестивали. Твоят персонализиран пътеводител в света на културата.
         </Paragraph>
 
         <div className="home-hero-actions">

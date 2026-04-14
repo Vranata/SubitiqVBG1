@@ -132,10 +132,6 @@ const EventDetails: React.FC = () => {
             <Title level={4} style={{ color: 'var(--text-primary)' }}>Детайли от базата</Title>
             <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
               <div>
-                <Text style={{ display: 'block', color: 'var(--text-secondary)' }}>ID:</Text>
-                <Text strong style={{ fontSize: '1.1rem', color: 'var(--text-primary)' }}>{currentEvent.id}</Text>
-              </div>
-              <div>
                 <Text style={{ display: 'block', color: 'var(--text-secondary)' }}>Изпълнител / организатор:</Text>
                 <Text strong style={{ fontSize: '1.1rem', color: 'var(--text-primary)' }}>{currentEvent.artist}</Text>
               </div>
@@ -157,11 +153,15 @@ const EventDetails: React.FC = () => {
               </div>
               <div>
                 <Text style={{ display: 'block', color: 'var(--text-secondary)' }}>Начало:</Text>
-                <Text strong style={{ fontSize: '1.1rem', color: 'var(--text-primary)' }}>{currentEvent.startDate} {currentEvent.startHour}</Text>
+                <Text strong style={{ fontSize: '1.1rem', color: 'var(--text-primary)' }}>
+                  {dayjs(currentEvent.startDate).format('D MMMM')} г., {currentEvent.startHour} ч.
+                </Text>
               </div>
               <div>
                 <Text style={{ display: 'block', color: 'var(--text-secondary)' }}>Край:</Text>
-                <Text strong style={{ fontSize: '1.1rem', color: 'var(--text-primary)' }}>{currentEvent.endDate} {currentEvent.endHour}</Text>
+                <Text strong style={{ fontSize: '1.1rem', color: 'var(--text-primary)' }}>
+                  {dayjs(currentEvent.endDate).format('D MMMM')} г., {currentEvent.endHour} ч.
+                </Text>
               </div>
 
               <EventLikeButton eventId={currentEvent.id} block />

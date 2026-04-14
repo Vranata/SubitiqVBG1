@@ -116,6 +116,14 @@ const formatDate = (value: string) => {
   return parsedDate.toLocaleDateString('bg-BG');
 };
 
+const categoryFallbackImages: Record<number, string> = {
+  1: 'https://pojinfknlfocjttxirpb.supabase.co/storage/v1/object/public/event-images/concerts.png',
+  2: 'https://pojinfknlfocjttxirpb.supabase.co/storage/v1/object/public/event-images/theater.png',
+  3: 'https://pojinfknlfocjttxirpb.supabase.co/storage/v1/object/public/event-images/cinema.png',
+  4: 'https://pojinfknlfocjttxirpb.supabase.co/storage/v1/object/public/event-images/festivals.png',
+  5: 'https://pojinfknlfocjttxirpb.supabase.co/storage/v1/object/public/event-images/sports.png',
+};
+
 const mapEventRow = (row: SupabaseEventRow): EventItem => ({
   id: String(row.id_event),
   title: row.name_event,
@@ -126,7 +134,7 @@ const mapEventRow = (row: SupabaseEventRow): EventItem => ({
   region: row.region,
   startDate: row.start_date,
   date: formatDate(row.start_date),
-  image: row.picture ?? fallbackImage,
+  image: row.picture || categoryFallbackImages[row.id_event_category] || fallbackImage,
   categoryId: row.id_event_category,
   category: row.category,
   startHour: row.start_hour,

@@ -569,7 +569,7 @@ const Events: React.FC = () => {
           <div className="events-page-head">
             <div>
               <Title level={2} style={{ color: 'var(--text-primary)', marginBottom: 0 }}>Всички събития</Title>
-              <Paragraph style={{ color: 'var(--text-secondary)', marginBottom: 0 }}>Открий най-интересното, което предстои във вашия град.</Paragraph>
+              <Paragraph style={{ color: 'var(--text-secondary)', marginBottom: 0 }}>Разгледай пълния календар и открий вълнуващи преживявания в твоя град.</Paragraph>
             </div>
 
             {canCreateEvent ? (
