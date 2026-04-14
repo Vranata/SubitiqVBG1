@@ -158,13 +158,13 @@ const EventDetails: React.FC = () => {
               <div>
                 <Text style={{ display: 'block', color: 'var(--text-secondary)' }}>Начало:</Text>
                 <Text strong style={{ fontSize: '1.1rem', color: 'var(--text-primary)' }}>
-                  {dayjs(currentEvent.startDate).format('D MMMM')} г., {currentEvent.startHour} ч.
+                  {dayjs(currentEvent.startDate).format('D MMMM')} г., {currentEvent.startHour.substring(0, 5)} ч.
                 </Text>
               </div>
               <div>
                 <Text style={{ display: 'block', color: 'var(--text-secondary)' }}>Край:</Text>
                 <Text strong style={{ fontSize: '1.1rem', color: 'var(--text-primary)' }}>
-                  {dayjs(currentEvent.endDate).format('D MMMM')} г., {currentEvent.endHour} ч.
+                  {dayjs(currentEvent.endDate).format('D MMMM')} г., {currentEvent.endHour.substring(0, 5)} ч.
                 </Text>
               </div>
 
@@ -173,6 +173,9 @@ const EventDetails: React.FC = () => {
               <Button type="primary" block size="large">
                 Запази събитието
               </Button>
+              <div style={{ textAlign: 'center', marginTop: '12px' }}>
+                <Text type="secondary" style={{ fontSize: '11px', opacity: 0.6 }}>Референтен номер: {currentEvent.id}</Text>
+              </div>
             </Space>
           </Card>
         </Col>
