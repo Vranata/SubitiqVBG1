@@ -368,7 +368,7 @@ const UserUpgradePopover: React.FC<{ user: AppUser }> = ({ user }) => {
             rules={[{ required: true, message: 'Избери тип заявител.' }]}
           >
             <Radio.Group>
-              <Space direction="horizontal" wrap>
+              <Space orientation="horizontal" wrap>
                 <Radio value="person">Човек</Radio>
                 <Radio value="company">Фирма</Radio>
               </Space>

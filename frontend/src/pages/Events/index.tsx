@@ -582,7 +582,7 @@ const Events: React.FC = () => {
           <div>
             {((isLoading || !hasRequested) && events.length === 0) ? (
               <div style={{ display: 'flex', justifyContent: 'center', padding: '96px 0' }}>
-                <Spin size="large" tip="Зареждане на събития..." />
+                <Spin size="large" description="Зареждане на събития..." />
               </div>
             ) : sortedEvents.length > 0 ? (
               <Row gutter={[24, 24]}>

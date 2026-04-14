@@ -83,7 +83,7 @@ const LocationInitializer: React.FC = () => {
         closePrompt();
       }}
       centered
-      maskClosable={false}
+      mask={{ closable: false }}
       closable={false}
     >
       <div style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>

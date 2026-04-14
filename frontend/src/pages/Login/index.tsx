@@ -124,8 +124,8 @@ const Login: React.FC = () => {
   if (isRecoveryMode) {
     return (
       <div style={{ minHeight: 'calc(100vh - 134px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 24px', background: 'radial-gradient(circle at top, rgba(24, 144, 255, 0.12), transparent 42%), radial-gradient(circle at bottom right, rgba(198, 90, 0, 0.12), transparent 36%)' }}>
-        <Card bordered={false} style={{ width: '100%', maxWidth: '460px', background: 'var(--surface-bg)', borderRadius: '24px', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-soft)' }}>
-          <Space direction="vertical" size="large" style={{ width: '100%' }}>
+        <Card variant="borderless" style={{ width: '100%', maxWidth: '460px', background: 'var(--surface-bg)', borderRadius: '24px', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-soft)' }}>
+          <Space orientation="vertical" size="large" style={{ width: '100%' }}>
             <div>
               <Typography.Title level={2} style={{ marginBottom: 8, color: 'var(--text-primary)' }}>
                 Възстановяване на парола
@@ -177,7 +177,7 @@ const Login: React.FC = () => {
                 />
               </Form.Item>
 
-              <Space direction="vertical" size="small" style={{ width: '100%' }}>
+              <Space orientation="vertical" size="small" style={{ width: '100%' }}>
                 <Button type="primary" htmlType="submit" block size="large" loading={isUpdatingPassword}>
                   Запази новата парола
                 </Button>
@@ -195,8 +195,8 @@ const Login: React.FC = () => {
 
   return (
     <div style={{ minHeight: 'calc(100vh - 134px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 24px', background: 'radial-gradient(circle at top, rgba(24, 144, 255, 0.12), transparent 42%), radial-gradient(circle at bottom right, rgba(198, 90, 0, 0.12), transparent 36%)' }}>
-      <Card bordered={false} style={{ width: '100%', maxWidth: '460px', background: 'var(--surface-bg)', borderRadius: '24px', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-soft)' }}>
-        <Space direction="vertical" size="large" style={{ width: '100%' }}>
+      <Card variant="borderless" style={{ width: '100%', maxWidth: '460px', background: 'var(--surface-bg)', borderRadius: '24px', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-soft)' }}>
+        <Space orientation="vertical" size="large" style={{ width: '100%' }}>
           <div>
             <Typography.Title level={2} style={{ marginBottom: 8, color: 'var(--text-primary)' }}>
               {authMode === 'login' ? 'Вход' : 'Регистрация'}
@@ -279,7 +279,7 @@ const Login: React.FC = () => {
               </Form.Item>
             )}
 
-            <Space direction="vertical" size="small" style={{ width: '100%' }}>
+            <Space orientation="vertical" size="small" style={{ width: '100%' }}>
               <Button
                 type="primary"
                 htmlType="submit"

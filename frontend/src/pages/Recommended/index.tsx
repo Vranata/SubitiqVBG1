@@ -209,7 +209,7 @@ const Recommended: React.FC = () => {
     <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '40px 24px', color: 'var(--text-primary)' }}>
       {contextHolder}
 
-      <Space direction="vertical" size="large" style={{ width: '100%', marginBottom: '32px' }}>
+      <Space orientation="vertical" size="large" style={{ width: '100%', marginBottom: '32px' }}>
         <div>
           <Title level={2} style={{ color: 'var(--text-primary)', marginBottom: 8 }}>Препоръчано за теб</Title>
           <Paragraph style={{ color: 'var(--text-secondary)', marginBottom: 0 }}>
@@ -218,8 +218,8 @@ const Recommended: React.FC = () => {
         </div>
 
         {!user ? (
-          <Card bordered={false} style={{ background: 'var(--surface-bg)', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-soft)' }}>
-            <Space direction="vertical" size="small" style={{ width: '100%' }}>
+          <Card variant="borderless" style={{ background: 'var(--surface-bg)', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-soft)' }}>
+            <Space orientation="vertical" size="small" style={{ width: '100%' }}>
               <Text strong style={{ color: 'var(--text-primary)' }}>Персоналните препоръки работят най-добре с акаунт.</Text>
               <Text style={{ color: 'var(--text-secondary)' }}>Влез или си направи акаунт, за да подреждаме събитията според твоя вкус.</Text>
               <div>
@@ -234,7 +234,7 @@ const Recommended: React.FC = () => {
 
       {isLoading ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: '96px 0' }}>
-          <Spin size="large" tip="Зареждане на препоръки..." />
+          <Spin size="large" description="Зареждане на препоръки..." />
         </div>
       ) : recommendedEvents.length > 0 ? (
         <Row gutter={[24, 24]}>

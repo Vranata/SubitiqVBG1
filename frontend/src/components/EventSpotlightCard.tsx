@@ -47,7 +47,7 @@ const EventSpotlightCard: React.FC<EventSpotlightCardProps> = ({ event, reasonTa
         {event.description}
       </Paragraph>
 
-      <Space direction="vertical" size={4} style={{ color: 'var(--text-secondary)', marginTop: 'auto' }}>
+      <Space orientation="vertical" size={4} style={{ color: 'var(--text-secondary)', marginTop: 'auto' }}>
         <Space size="small" style={{ color: 'var(--text-secondary)' }}>
           <EnvironmentOutlined /> {event.region}
         </Space>

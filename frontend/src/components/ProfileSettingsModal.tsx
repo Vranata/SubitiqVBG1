@@ -363,7 +363,7 @@ const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
       onOk={() => form.submit()}
       footer={footer}
     >
-      <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+      <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
         <Typography.Paragraph style={{ marginBottom: 0, color: 'var(--text-secondary)' }}>
           {mode === 'survey'
             ? 'Избери категории, ако искаш, за да направим първите препоръки по-точни. Можеш да пропуснеш тази стъпка.'
@@ -392,7 +392,7 @@ const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
               </Button>
 
               {isEmailChangeVisible ? (
-                <Space direction="vertical" size="small" style={{ width: '100%' }}>
+                <Space orientation="vertical" size="small" style={{ width: '100%' }}>
                   <Typography.Paragraph style={{ marginBottom: 0, color: 'var(--text-secondary)' }}>
                     Желаете да смените имейла си? Ако не сте били вие, е добре да промените и данните си за вход.
                   </Typography.Paragraph>
@@ -421,7 +421,7 @@ const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
               </Button>
 
               {isPasswordChangeVisible && (
-                <Space direction="vertical" size="small" style={{ width: '100%' }}>
+                <Space orientation="vertical" size="small" style={{ width: '100%' }}>
                   <Typography.Paragraph style={{ marginBottom: 0, color: 'var(--text-secondary)' }}>
                     Желаете да смените паролата си? Ако не сте били вие, е добре да промените и данните си за вход.
                   </Typography.Paragraph>

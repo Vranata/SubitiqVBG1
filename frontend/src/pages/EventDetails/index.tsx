@@ -69,7 +69,7 @@ const EventDetails: React.FC = () => {
   if (((isLoading || !hasRequested) && !currentEvent)) {
     return (
       <div style={{ maxWidth: '1200px', margin: '40px auto', padding: '0 24px', display: 'flex', justifyContent: 'center' }}>
-        <Spin size="large" tip="Зареждане на събитието..." />
+        <Spin size="large" description="Зареждане на събитието..." />
       </div>
     );
   }
@@ -128,9 +128,9 @@ const EventDetails: React.FC = () => {
         </Col>
 
         <Col xs={24} lg={8}>
-          <Card bordered={false} style={{ background: 'var(--surface-bg)', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-soft)', position: 'sticky', top: '100px' }}>
+          <Card variant="borderless" style={{ background: 'var(--surface-bg)', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-soft)', position: 'sticky', top: '100px' }}>
             <Title level={4} style={{ color: 'var(--text-primary)' }}>Детайли от базата</Title>
-            <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+            <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
               <div>
                 <Text style={{ display: 'block', color: 'var(--text-secondary)' }}>ID:</Text>
                 <Text strong style={{ fontSize: '1.1rem', color: 'var(--text-primary)' }}>{currentEvent.id}</Text>
