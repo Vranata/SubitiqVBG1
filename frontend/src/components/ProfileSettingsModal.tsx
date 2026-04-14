@@ -23,6 +23,10 @@ type ProfileSettingsValues = {
   categoryIds: string[];
 };
 
+type UserRowId = {
+  id_user: number;
+};
+
 type ProfileSettingsModalProps = {
   open: boolean;
   mode: 'profile' | 'survey';
@@ -48,16 +52,42 @@ const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
   const [isPasswordChangeVisible, setIsPasswordChangeVisible] = useState(false);
   const availableCategories = useMemo(() => (categoryOptions.length > 0 ? categoryOptions : fallbackCategoryOptions), [categoryOptions]);
 
+  const resolveCurrentUserDbId = async () => {
+    const { data, error } = await supabase
+      .from('users')
+      .select('id_user')
+      .eq('auth_user_id', user.authUserId)
+      .maybeSingle<UserRowId>();
+
+    if (error) {
+      throw error;
+    }
+
+    return data?.id_user ?? null;
+  };
+
   useEffect(() => {
     if (!open) {
       return;
     }
 
     const loadProfilePreferences = async () => {
+      const currentUserDbId = await resolveCurrentUserDbId();
+
+      if (currentUserDbId === null) {
+        form.setFieldsValue({
+          name: user.name,
+          email: user.email,
+          categoryIds: [],
+        });
+
+        return;
+      }
+
       const { data, error } = await supabase
         .from('user_likings')
         .select('id_event_category')
-        .eq('id_user', Number(user.id));
+        .eq('id_user', currentUserDbId);
 
       if (error) {
         console.warn('Failed to load profile preferences.', error);
@@ -91,7 +121,11 @@ const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
   }, [form, open, user.email, user.id, user.name]);
 
   const persistCategoryPreferences = async (categoryIds: string[]) => {
-    const currentUserDbId = Number(user.id);
+    const currentUserDbId = await resolveCurrentUserDbId();
+
+    if (currentUserDbId === null) {
+      return;
+    }
 
     const deleteResult = await supabase.from('user_likings').delete().eq('id_user', currentUserDbId);
 

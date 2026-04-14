@@ -25,7 +25,7 @@ type PreferenceRow = {
   id_event_category: number;
 };
 
-const resolveCurrentUserDbId = async (authUserId: string): Promise<number> => {
+const resolveCurrentUserDbId = async (authUserId: string): Promise<number | null> => {
   const { data, error } = await supabase
     .from('users')
     .select('id_user')
@@ -37,7 +37,7 @@ const resolveCurrentUserDbId = async (authUserId: string): Promise<number> => {
   }
 
   if (!data) {
-    throw new Error('Потребителският профил не е синхронизиран. Презареди страницата.');
+    return null;
   }
 
   return data.id_user;
@@ -103,6 +103,15 @@ const Recommended: React.FC = () => {
         }
 
         const currentUserDbId = await resolveCurrentUserDbId(user.authUserId);
+
+        if (currentUserDbId === null) {
+          if (!cancelled) {
+            resetLikedEvents();
+            setPreferredCategoryIds([]);
+          }
+
+          return;
+        }
 
         if (!cancelled) {
           await loadLikedEventIds(String(currentUserDbId));
