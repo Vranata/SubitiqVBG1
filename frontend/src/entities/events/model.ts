@@ -116,25 +116,19 @@ const formatDate = (value: string) => {
   return d.format('D MMMM YYYY г.');
 };
 
-const getCategoryKeyword = (id: number) => {
-  const map: Record<number, string> = {
-    1: 'concert,stage',
-    2: 'theater,performance',
-    3: 'cinema,movie',
-    4: 'festival,crowd',
-    5: 'sports,stadium',
-  };
-  return map[id] || 'culture,event';
+const categoryFallbackImages: Record<number, string> = {
+  1: 'https://pojinfknlfocjttxirpb.supabase.co/storage/v1/object/public/events/1_2.jpg',
+  2: 'https://pojinfknlfocjttxirpb.supabase.co/storage/v1/object/public/events/2_3.jpg',
+  3: 'https://pojinfknlfocjttxirpb.supabase.co/storage/v1/object/public/events/4_5.jpg',
+  4: 'https://pojinfknlfocjttxirpb.supabase.co/storage/v1/object/public/events/3_4.jpg',
+  5: 'https://pojinfknlfocjttxirpb.supabase.co/storage/v1/object/public/events/5_2.jpg',
 };
 
 const mapEventRow = (row: SupabaseEventRow): EventItem => {
   // Treat the old unsplash fallback or any obviously generic placeholder as "no image"
-  const isOldFallback = row.picture?.includes('photo-1514525253161-7a46d19cd819');
+  const isOldFallback = row.picture && row.picture.includes('photo-1514525253161-7a46d19cd819');
   const hasValidPicture = row.picture && !isOldFallback && row.picture.trim() !== '';
   
-  // If no valid picture, generate a randomized but category-relevant fallback from Unsplash
-  const fallbackUrl = `https://images.unsplash.com/featured/1200x800?${getCategoryKeyword(row.id_event_category)}&sig=${row.id_event}`;
-
   return {
     id: String(row.id_event),
     title: row.name_event,
@@ -145,7 +139,7 @@ const mapEventRow = (row: SupabaseEventRow): EventItem => {
     region: row.region,
     startDate: row.start_date,
     date: formatDate(row.start_date),
-    image: hasValidPicture ? row.picture! : fallbackUrl,
+    image: hasValidPicture ? row.picture! : (categoryFallbackImages[row.id_event_category] || fallbackImage),
     categoryId: row.id_event_category,
     category: row.category,
     startHour: row.start_hour,
