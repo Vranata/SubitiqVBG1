@@ -3,6 +3,10 @@ import { useUnit } from 'effector-react';
 import { Link } from 'atomic-router-react';
 import { Button, Typography, Space, Tag, Divider, Row, Col, Card, Spin } from 'antd';
 import { CalendarOutlined, EnvironmentOutlined, ArrowLeftOutlined, TagOutlined } from '@ant-design/icons';
+import dayjs from 'dayjs';
+import 'dayjs/locale/bg';
+
+dayjs.locale('bg');
 import EventLikeButton from '../../components/EventLikeButton';
 import { routes } from '../../shared/routing';
 import { $currentEvent, $isDetailLoading, clearLikedEventIds, eventDetailsOpened, fetchLikedEventIdsFx } from '../../entities/events/model';
