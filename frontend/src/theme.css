@@ -560,15 +560,16 @@
 
 .layout[data-theme='dark'] .app-navigation-link:hover {
   color: #ffffff;
-  background: transparent;
+  background: var(--nav-hover-bg);
 }
 
 .layout[data-theme='orange'] .app-navigation-link:hover {
-  background: rgba(255, 255, 255, 0.55);
+  background: var(--nav-hover-bg);
 }
 
 .layout[data-theme='dark'] .app-navigation-link-active {
   color: #ffffff;
+  background: var(--nav-active-bg);
 }
 
 .events-page {
