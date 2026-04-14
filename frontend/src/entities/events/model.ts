@@ -116,18 +116,25 @@ const formatDate = (value: string) => {
   return d.format('D MMMM YYYY г.');
 };
 
-const categoryFallbackImages: Record<number, string> = {
-  1: 'https://pojinfknlfocjttxirpb.supabase.co/storage/v1/object/public/event-images/concerts.png',
-  2: 'https://pojinfknlfocjttxirpb.supabase.co/storage/v1/object/public/event-images/theater.png',
-  3: 'https://pojinfknlfocjttxirpb.supabase.co/storage/v1/object/public/event-images/cinema.png',
-  4: 'https://pojinfknlfocjttxirpb.supabase.co/storage/v1/object/public/event-images/festivals.png',
-  5: 'https://pojinfknlfocjttxirpb.supabase.co/storage/v1/object/public/event-images/sports.png',
+const getCategoryKeyword = (id: number) => {
+  const map: Record<number, string> = {
+    1: 'concert,stage',
+    2: 'theater,performance',
+    3: 'cinema,movie',
+    4: 'festival,crowd',
+    5: 'sports,stadium',
+  };
+  return map[id] || 'culture,event';
 };
 
 const mapEventRow = (row: SupabaseEventRow): EventItem => {
-  // Treat the old unsplash fallback as "no image" so we use the new category fallbacks
-  const hasValidPicture = row.picture && row.picture !== fallbackImage && row.picture.trim() !== '';
+  // Treat the old unsplash fallback or any obviously generic placeholder as "no image"
+  const isOldFallback = row.picture?.includes('photo-1514525253161-7a46d19cd819');
+  const hasValidPicture = row.picture && !isOldFallback && row.picture.trim() !== '';
   
+  // If no valid picture, generate a randomized but category-relevant fallback from Unsplash
+  const fallbackUrl = `https://images.unsplash.com/featured/1200x800?${getCategoryKeyword(row.id_event_category)}&sig=${row.id_event}`;
+
   return {
     id: String(row.id_event),
     title: row.name_event,
@@ -138,7 +145,7 @@ const mapEventRow = (row: SupabaseEventRow): EventItem => {
     region: row.region,
     startDate: row.start_date,
     date: formatDate(row.start_date),
-    image: hasValidPicture ? row.picture! : (categoryFallbackImages[row.id_event_category] || fallbackImage),
+    image: hasValidPicture ? row.picture! : fallbackUrl,
     categoryId: row.id_event_category,
     category: row.category,
     startHour: row.start_hour,
