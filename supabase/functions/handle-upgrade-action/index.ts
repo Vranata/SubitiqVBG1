@@ -17,6 +17,7 @@ const TEXTS = {
   alreadyProcessed: 'Тази заявка вече е била обработена.',
   approved: 'Потребителят бе успешно повишен в Special User!',
   rejected: 'Заявката бе успешно отхвърлена.',
+  dbError: 'Възникна техническа грешка при обновяване на базата данни.',
 };
 
 function redirectResponse(type: 'success' | 'error' | 'info' | 'warning', text: string) {
@@ -47,14 +48,15 @@ Deno.serve(async (req: Request) => {
       return redirectResponse('error', TEXTS.invalidAction);
     }
 
-    // 1. Fetch request status
+    // 1. Fetch request details
     const { data: requestRow, error: fetchError } = await supabase
       .from('user_upgrade_requests')
-      .select('status')
+      .select('*')
       .eq('id_request', requestId)
       .single();
 
     if (fetchError || !requestRow) {
+      console.error('Fetch request error:', fetchError);
       return redirectResponse('error', TEXTS.notFound);
     }
 
@@ -64,13 +66,25 @@ Deno.serve(async (req: Request) => {
 
     // 2. Perform action
     if (action === 'approve') {
+      console.log(`Approving user ${authUserId}...`);
+      
+      // We use UPSERT to handle cases where the user record might be missing in public.users
+      // but exists in auth.users. This ensures the user row is present and correct.
       const { error: upgradeError } = await supabase
         .from('users')
-        .update({ id_category: 2 })
-        .eq('auth_user_id', authUserId);
+        .upsert({
+          auth_user_id: authUserId,
+          email: requestRow.applicant_email,
+          name_user: requestRow.applicant_name,
+          id_category: 2, // Special User
+          id_region: 0,   // Default region if missing
+          password_hash: 'supabase_auth_managed_placeholder',
+          profile_onboarding_completed: true
+        }, { onConflict: 'auth_user_id' });
 
       if (upgradeError) {
-        return redirectResponse('error', upgradeError.message);
+        console.error('Upgrade error:', upgradeError);
+        return redirectResponse('error', `${TEXTS.dbError} (${upgradeError.message})`);
       }
     }
 
@@ -81,12 +95,14 @@ Deno.serve(async (req: Request) => {
       .eq('id_request', requestId);
 
     if (updateError) {
-      return redirectResponse('error', updateError.message);
+      console.error('Update request status error:', updateError);
+      return redirectResponse('error', `${TEXTS.dbError} (${updateError.message})`);
     }
 
     return redirectResponse('success', action === 'approve' ? TEXTS.approved : TEXTS.rejected);
 
   } catch (err: any) {
+    console.error('Unexpected error:', err);
     return redirectResponse('error', err.message || String(err));
   }
 });
