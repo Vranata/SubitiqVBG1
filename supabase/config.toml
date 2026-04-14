@@ -2,4 +2,4 @@
 verify_jwt = false
 
 [functions.handle-role-downgrade]
-verify_jwt = true
+verify_jwt = false
