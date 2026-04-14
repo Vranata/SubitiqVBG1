@@ -1,20 +1,43 @@
 import React from 'react';
-import { Typography, Button } from 'antd';
-import { Link } from 'atomic-router-react';
+import { Typography, Button, Space } from 'antd';
+import { useUnit } from 'effector-react';
 import { CalendarOutlined, ClockCircleOutlined, CompassOutlined, FireOutlined } from '@ant-design/icons';
 import { routes } from '../../shared/routing';
+import { 
+  $featuredEvents, 
+  $regionOptions, 
+  $categoryOptions,
+  regionChanged,
+  categoryChanged
+} from '../../entities/events/model';
 
 const { Title, Paragraph } = Typography;
 
-const cities = ['София', 'Пловдив', 'Варна', 'Бургас', 'Русе', 'Габрово'];
-const themes = ['Концерти', 'Театър', 'Кино', 'Фестивали'];
-const featuredRows = [
-  { time: '18:30', label: 'Концерт', title: 'Една вечер с жива музика', city: 'София' },
-  { time: '20:00', label: 'Театър', title: 'Сцена с характер', city: 'Пловдив' },
-  { time: '21:15', label: 'Фестивал', title: 'Градски ритъм и прожекции', city: 'Габрово' },
-];
-
 const Hero: React.FC = () => {
+  const { 
+    featuredEvents, 
+    regions, 
+    categories,
+    setRegion,
+    setCategory
+  } = useUnit({
+    featuredEvents: $featuredEvents,
+    regions: $regionOptions,
+    categories: $categoryOptions,
+    setRegion: regionChanged,
+    setCategory: categoryChanged,
+  });
+
+  const handleRegionClick = (regionId: string) => {
+    setRegion(regionId);
+    routes.events.open();
+  };
+
+  const handleCategoryClick = (categoryId: string) => {
+    setCategory(categoryId);
+    routes.events.open();
+  };
+
   return (
     <div className="home-hero">
       <div className="home-hero-copy">
@@ -27,30 +50,39 @@ const Hero: React.FC = () => {
         </Paragraph>
 
         <div className="home-hero-actions">
-          <Link to={routes.events}>
-            <Button
-              type="primary"
-              size="large"
-              icon={<CalendarOutlined />}
-              className="home-hero-primary"
-            >
-              Виж събитията
-            </Button>
-          </Link>
+          <Button
+            type="primary"
+            size="large"
+            icon={<CalendarOutlined />}
+            className="home-hero-primary"
+            onClick={() => routes.events.open()}
+          >
+            Виж събитията
+          </Button>
         </div>
 
         <div className="home-hero-rail" aria-label="Категории">
-          {themes.map((theme) => (
-            <span key={theme} className="home-hero-rail-pill">
-              {theme}
+          {categories.slice(0, 5).map((cat) => (
+            <span 
+              key={cat.value} 
+              className="home-hero-rail-pill"
+              onClick={() => handleCategoryClick(cat.value)}
+              style={{ cursor: 'pointer' }}
+            >
+              {cat.label}
             </span>
           ))}
         </div>
 
         <div className="home-hero-cities" aria-label="Градове">
-          {cities.map((city) => (
-            <span key={city} className="home-city-pill">
-              {city}
+          {regions.slice(0, 6).map((reg) => (
+            <span 
+              key={reg.value} 
+              className="home-city-pill"
+              onClick={() => handleRegionClick(reg.value)}
+              style={{ cursor: 'pointer' }}
+            >
+              {reg.label}
             </span>
           ))}
         </div>
@@ -60,30 +92,43 @@ const Hero: React.FC = () => {
         <div className="home-hero-spotlight-orb" />
         <div className="home-hero-spotlight-card">
           <div className="home-hero-spotlight-pill">
-            <FireOutlined /> На фокус днес
+            <FireOutlined /> Актуално сега
           </div>
-          <div className="home-hero-spotlight-title">Афишен панел за следващото излизане.</div>
-          <div className="home-hero-spotlight-text">
-            Стилизирано резюме на програмата за вечерта, с град, час и категория. Изглежда като билетен панел, но не натрапва цена.
-          </div>
+          <Title level={4} style={{ color: 'var(--text-primary)', marginBottom: '8px' }}>
+            {featuredEvents.length > 0 ? 'Твоят афиш за днес' : 'Предстоящи събития'}
+          </Title>
+          <Paragraph style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
+            Подбрани предложения от програмата, които не искаш да изпуснеш.
+          </Paragraph>
 
           <div className="home-hero-spotlight-schedule">
-            {featuredRows.map((row) => (
-              <div key={row.title} className="home-hero-spotlight-row">
-                <div className="home-hero-row-time">
-                  <ClockCircleOutlined /> {row.time}
+            {featuredEvents.length > 0 ? (
+              featuredEvents.map((event) => (
+                <div 
+                  key={event.id} 
+                  className="home-hero-spotlight-row"
+                  onClick={() => routes.eventDetails.open({ id: event.id })}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <div className="home-hero-row-time">
+                    <ClockCircleOutlined /> {event.startHour.substring(0, 5)}
+                  </div>
+                  <div className="home-hero-row-copy">
+                    <strong>{event.title}</strong>
+                    <span>{event.category} · {event.region}</span>
+                  </div>
                 </div>
-                <div className="home-hero-row-copy">
-                  <strong>{row.title}</strong>
-                  <span>{row.label} · {row.city}</span>
-                </div>
+              ))
+            ) : (
+              <div style={{ padding: '20px 0', textAlign: 'center', opacity: 0.5 }}>
+                Няма активни събития в момента.
               </div>
-            ))}
+            )}
           </div>
 
           <div className="home-hero-spotlight-footer">
-            <span><CompassOutlined /> Град + категория</span>
-            <span><CalendarOutlined /> Подбрано за днес</span>
+            <span><CompassOutlined /> Всички региони</span>
+            <span><CalendarOutlined /> Обновено днес</span>
           </div>
         </div>
       </div>

@@ -377,6 +377,7 @@ export const fetchCategoriesFx = createEffect(async (): Promise<FilterOption[]> 
   }));
 });
 
+export const homePageOpened = createEvent<void>();
 export const eventsPageOpened = createEvent<void>();
 export const eventDetailsOpened = createEvent<string>();
 export const searchChanged = createEvent<string>();
@@ -390,6 +391,13 @@ export const $events = createStore<EventItem[]>([])
   .on(addEventFx.doneData, (events, nextEvent) => sortEvents([...events, nextEvent]))
   .on(updateEventFx.doneData, (events, nextEvent) => sortEvents(events.map((event) => (event.id === nextEvent.id ? nextEvent : event))))
   .on(deleteEventFx.doneData, (events, deletedEventId) => events.filter((event) => event.id !== deletedEventId));
+
+export const $featuredEvents = $events.map((events) => {
+  const today = dayjs().startOf('day');
+  return [...events]
+    .filter((e) => !dayjs(e.endDate).isBefore(today, 'day'))
+    .slice(0, 3);
+});
 export const $currentEvent = createStore<EventItem | null>(null)
   .on(fetchEventByIdFx.doneData, (_, nextEvent) => nextEvent)
   .on(updateEventFx.doneData, (currentEvent, nextEvent) => (currentEvent?.id === nextEvent.id ? nextEvent : currentEvent))
@@ -420,17 +428,12 @@ export const $regionOptions = createStore<FilterOption[]>([]).on(fetchRegionsFx.
 export const $categoryOptions = createStore<FilterOption[]>([]).on(fetchCategoriesFx.doneData, (_, nextOptions) => nextOptions);
 
 sample({
-  clock: eventsPageOpened,
-  target: fetchRegionsFx,
+  clock: [eventsPageOpened, homePageOpened],
+  target: [fetchRegionsFx, fetchCategoriesFx],
 });
 
 sample({
-  clock: eventsPageOpened,
-  target: fetchCategoriesFx,
-});
-
-sample({
-  clock: [eventsPageOpened, searchChanged, regionChanged, categoryChanged, dateChanged],
+  clock: [eventsPageOpened, homePageOpened, searchChanged, regionChanged, categoryChanged, dateChanged],
   source: {
     searchText: $searchText,
     regionId: $selectedRegionId,
