@@ -63,7 +63,26 @@ const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
       throw error;
     }
 
-    return data?.id_user ?? null;
+    if (data?.id_user) {
+      return data.id_user;
+    }
+
+    // Fallback: If user row doesn't exist (e.g. registered before trigger added), create it
+    const { data: upsertData, error: upsertError } = await supabase.from('users').upsert({
+      auth_user_id: user.authUserId,
+      email: user.email,
+      name_user: user.name,
+      id_category: 1,
+      id_region: 0,
+      profile_onboarding_completed: false
+    }, { onConflict: 'auth_user_id' }).select('id_user').single();
+
+    if (upsertError) {
+      console.error('Failed to implicitly create user row:', upsertError);
+      return null;
+    }
+
+    return upsertData?.id_user ?? null;
   };
 
   useEffect(() => {

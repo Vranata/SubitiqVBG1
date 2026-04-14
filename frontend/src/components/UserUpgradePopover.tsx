@@ -169,7 +169,7 @@ const UserUpgradePopover: React.FC<{ user: AppUser }> = ({ user }) => {
     try {
       setIsSubmitting(true);
 
-      const { error } = await supabase.from('user_upgrade_requests').insert({
+      const { data: requestRow, error } = await supabase.from('user_upgrade_requests').insert({
         auth_user_id: user.authUserId,
         applicant_name: values.applicantName,
         applicant_email: values.applicantEmail,
@@ -177,11 +177,17 @@ const UserUpgradePopover: React.FC<{ user: AppUser }> = ({ user }) => {
         is_company: values.applicantType === 'company',
         company_identifier: values.applicantType === 'company' ? values.companyIdentifier ?? null : null,
         reason: values.reason,
-      });
+      }).select('id_request').single();
 
-      if (error) {
+      if (error || !requestRow) {
         throw new Error(`Грешка при записване на заявката: ${extractErrorMessage(error, 'Неизвестна грешка при записване.')}`);
       }
+
+      const requestPayloadExt = {
+        ...requestPayload,
+        requestId: requestRow.id_request,
+        applicantAuthId: user.authUserId,
+      };
 
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-upgrade-request`, {
         method: 'POST',
@@ -190,7 +196,7 @@ const UserUpgradePopover: React.FC<{ user: AppUser }> = ({ user }) => {
           apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
           Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
         },
-        body: JSON.stringify(requestPayload),
+        body: JSON.stringify(requestPayloadExt),
       });
 
       const responseText = await response.text();

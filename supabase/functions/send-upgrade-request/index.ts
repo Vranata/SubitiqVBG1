@@ -13,11 +13,14 @@ type UpgradeRequestBody = {
   reason?: string;
   submittedByEmail?: string;
   submittedByRole?: string;
+  requestId?: number;
+  applicantAuthId?: string;
 };
 
 const adminEmail = Deno.env.get('ADMIN_EMAIL') ?? 'culturobg@gmail.com';
 const smtpUser = Deno.env.get('SMTP_USER');
 const smtpAppPassword = Deno.env.get('SMTP_APP_PASSWORD');
+const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? 'https://pojinfknlfocjttxirpb.supabase.co';
 
 const smtpTransport = smtpUser && smtpAppPassword
   ? nodemailer.createTransport({
@@ -57,7 +60,13 @@ const buildEmailHtml = (payload: {
   reason: string;
   submittedByEmail: string;
   submittedByRole: string;
-}) => `
+  requestId: number;
+  applicantAuthId: string;
+}) => {
+  const approveUrl = `${supabaseUrl}/functions/v1/handle-upgrade-action?action=approve&request_id=${payload.requestId}&auth_user_id=${payload.applicantAuthId}`;
+  const rejectUrl = `${supabaseUrl}/functions/v1/handle-upgrade-action?action=reject&request_id=${payload.requestId}&auth_user_id=${payload.applicantAuthId}`;
+
+  return `
   <h2>Нова заявка за Special User</h2>
   <p><strong>Име:</strong> ${escapeHtml(payload.applicantName)}</p>
   <p><strong>Имейл:</strong> ${escapeHtml(payload.applicantEmail)}</p>
@@ -69,7 +78,14 @@ const buildEmailHtml = (payload: {
   <hr />
   <p><strong>Подал от:</strong> ${escapeHtml(payload.submittedByEmail)}</p>
   <p><strong>Роля:</strong> ${escapeHtml(payload.submittedByRole)}</p>
+  <br />
+  <div style="display: flex; gap: 10px; margin-top: 20px;">
+    <a href="${approveUrl}" style="background-color: #28a745; color: white; padding: 12px 20px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">Одобри</a>
+    &nbsp;&nbsp;&nbsp;
+    <a href="${rejectUrl}" style="background-color: #dc3545; color: white; padding: 12px 20px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">Отхвърли</a>
+  </div>
 `;
+};
 
 const buildEmailText = (payload: {
   applicantName: string;
@@ -119,6 +135,8 @@ Deno.serve(async (request: Request) => {
     const reason = payload.reason?.trim() || '-';
     const submittedByEmail = payload.submittedByEmail?.trim() || '-';
     const submittedByRole = payload.submittedByRole?.trim() || '-';
+    const requestId = payload.requestId || 0;
+    const applicantAuthId = payload.applicantAuthId || '';
 
     await smtpTransport.sendMail({
       from: `CULTURO BG <${smtpUser}>`,
@@ -144,6 +162,8 @@ Deno.serve(async (request: Request) => {
         reason,
         submittedByEmail,
         submittedByRole,
+        requestId,
+        applicantAuthId,
       }),
     });
 
