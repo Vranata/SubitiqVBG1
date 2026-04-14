@@ -146,10 +146,19 @@ const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
       await persistCategoryPreferences(values.categoryIds);
 
       // 2. Update basic info (name/email if needed)
-      // Note: email change requires confirmation so we handle it separately if desired
       if (values.name !== user.name) {
-        const { error } = await updateAccount({ full_name: values.name });
-        if (error) throw error;
+        // Update Auth Metadata (for fallback)
+        await updateAccount({ data: { full_name: values.name } });
+        
+        // Update Users Table (source of truth for the app)
+        const currentUserDbId = await resolveCurrentUserDbId();
+        if (currentUserDbId) {
+          const { error: dbError } = await supabase
+            .from('users')
+            .update({ name_user: values.name })
+            .eq('id_user', currentUserDbId);
+          if (dbError) throw dbError;
+        }
       }
 
       // 3. Mark onboarding as completed if in survey mode
@@ -157,7 +166,7 @@ const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
         const currentUserDbId = await resolveCurrentUserDbId();
         if (currentUserDbId) {
           await supabase.from('users').update({ profile_onboarding_completed: true }).eq('id_user', currentUserDbId);
-          setLocalOnboardingCompletion(true);
+          setLocalOnboardingCompletion(user.authUserId);
         }
       }
 
@@ -177,11 +186,11 @@ const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
   const handlePasswordReset = async () => {
     setIsSendingPasswordReset(true);
     try {
-      const { error } = await resetPassword(user.email);
-      if (error) throw error;
+      await resetPassword({ email: user.email, redirectTo: window.location.origin });
       message.success('Линк за нулиране на паролата е изпратен на вашия имейл.');
       setIsPasswordChangeVisible(false);
     } catch (error: any) {
+      console.error('Password reset error:', error);
       message.error(error.message || 'Грешка при изпращане на имейл.');
     } finally {
       setIsSendingPasswordReset(false);
@@ -197,11 +206,11 @@ const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
 
     setIsSendingEmailChange(true);
     try {
-      const { error } = await updateAccount({ email: newEmail });
-      if (error) throw error;
+      await updateAccount({ email: newEmail });
       message.success('Заявката е изпратена. Моля проверете новия си имейл за потвърждение.');
       setIsEmailChangeVisible(false);
     } catch (error: any) {
+      console.error('Email change error:', error);
       message.error(error.message || 'Грешка при промяна на имейла.');
     } finally {
       setIsSendingEmailChange(false);
