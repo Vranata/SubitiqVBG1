@@ -211,33 +211,55 @@ const App: React.FC = () => {
             </span>
           </div>
 
-          <div className="header-navigation-shell">
+          <div className="header-navigation-shell" style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
             <SidebarNavigation themeMode={themeMode} selectedKey={selectedKey} items={activeNavigationItems} compact />
           </div>
 
-          <Button
-            className="mobile-menu-button"
-            type="text"
-            icon={<MenuOutlined />}
-            onClick={() => setIsMobileDrawerOpen(true)}
-            style={{
-              display: 'none',
-              color: 'var(--header-text)',
-              fontSize: '20px',
-            }}
-          />
 
-          <div style={{ flex: 1 }} />
+          <div className="header-actions-desktop">
+            {isAuthenticated && user && <UserUpgradePopover user={user} />}
 
-          {isAuthenticated && user && <UserUpgradePopover user={user} />}
-
-          {isAuthenticated ? (
-            <Tooltip title="Изход">
+            {isAuthenticated ? (
+              <Tooltip title="Изход">
+                <Button
+                  shape="circle"
+                  type="text"
+                  onClick={() => signOut()}
+                  icon={<LogoutOutlined />}
+                  style={{
+                    width: 34,
+                    height: 34,
+                    marginLeft: 12,
+                    color: 'var(--toggle-fg)',
+                    background: 'var(--toggle-bg)',
+                    border: '1px solid var(--toggle-border)',
+                  }}
+                />
+              </Tooltip>
+            ) : (
+              <Tooltip title="Вход">
+                <Link to={routes.login} style={{ display: 'inline-flex', marginLeft: 12 }}>
+                  <Button
+                    shape="circle"
+                    type="text"
+                    icon={<LoginOutlined />}
+                    style={{
+                      width: 34,
+                      height: 34,
+                      color: 'var(--toggle-fg)',
+                      background: 'var(--toggle-bg)',
+                      border: '1px solid var(--toggle-border)',
+                    }}
+                  />
+                </Link>
+              </Tooltip>
+            )}
+            <Tooltip title={themeTooltip}>
               <Button
                 shape="circle"
                 type="text"
-                onClick={() => signOut()}
-                icon={<LogoutOutlined />}
+                onClick={cycleTheme}
+                icon={themeIcon}
                 style={{
                   width: 34,
                   height: 34,
@@ -248,41 +270,23 @@ const App: React.FC = () => {
                 }}
               />
             </Tooltip>
-          ) : (
-            <Tooltip title="Вход">
-              <Link to={routes.login} style={{ display: 'inline-flex', marginLeft: 12 }}>
-                <Button
-                  shape="circle"
-                  type="text"
-                  icon={<LoginOutlined />}
-                  style={{
-                    width: 34,
-                    height: 34,
-                    color: 'var(--toggle-fg)',
-                    background: 'var(--toggle-bg)',
-                    border: '1px solid var(--toggle-border)',
-                  }}
-                />
-              </Link>
-            </Tooltip>
-          )}
+          </div>
 
-          <Tooltip title={themeTooltip}>
-            <Button
-              shape="circle"
-              type="text"
-              onClick={cycleTheme}
-              icon={themeIcon}
-              style={{
-                width: 34,
-                height: 34,
-                marginLeft: 12,
-                color: 'var(--toggle-fg)',
-                background: 'var(--toggle-bg)',
-                border: '1px solid var(--toggle-border)',
-              }}
-            />
-          </Tooltip>
+          <Button
+            className="mobile-menu-button"
+            type="text"
+            icon={<MenuOutlined />}
+            onClick={() => setIsMobileDrawerOpen(!isMobileDrawerOpen)}
+            style={{
+              display: 'none',
+              color: 'var(--header-text)',
+              fontSize: '22px',
+              padding: 0,
+              width: 32,
+              height: 32,
+              marginLeft: 'auto'
+            }}
+          />
         </Header>
 
         <Layout style={{ minHeight: 'calc(100vh - 134px)', background: 'transparent', position: 'relative', zIndex: 1 }}>
@@ -317,15 +321,60 @@ const App: React.FC = () => {
 
         <Drawer
           title="Меню"
-          placement="left"
+          placement="right"
           onClose={() => setIsMobileDrawerOpen(false)}
           open={isMobileDrawerOpen}
           styles={{ body: { padding: 0, background: 'var(--header-bg)' }, header: { background: 'var(--header-bg)', borderBottom: '1px solid var(--border-color)' } }}
           headerStyle={{ color: 'var(--header-text)' }}
           width={280}
         >
-          <div style={{ padding: '24px 16px' }} onClick={() => setIsMobileDrawerOpen(false)}>
-            <SidebarNavigation themeMode={themeMode} selectedKey={selectedKey} items={activeNavigationItems} />
+          <div style={{ padding: '24px 16px' }}>
+            <div onClick={() => setIsMobileDrawerOpen(false)}>
+              <SidebarNavigation themeMode={themeMode} selectedKey={selectedKey} items={activeNavigationItems} />
+            </div>
+            
+            <div style={{ borderTop: '1px solid var(--border-color)', marginTop: '24px', paddingTop: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {isAuthenticated && user && (
+                <div style={{ padding: '0 14px' }}>
+                   <UserUpgradePopover user={user} variant="vertical" />
+                </div>
+              )}
+              
+              <Button 
+                block 
+                size="large" 
+                icon={themeIcon} 
+                onClick={cycleTheme}
+                style={{ borderRadius: '12px', background: 'var(--toggle-bg)', color: 'var(--toggle-fg)', border: '1px solid var(--toggle-border)' }}
+              >
+                {themeTooltip}
+              </Button>
+
+              {isAuthenticated ? (
+                <Button 
+                  block 
+                  danger 
+                  size="large" 
+                  icon={<LogoutOutlined />} 
+                  onClick={() => { signOut(); setIsMobileDrawerOpen(false); }}
+                  style={{ borderRadius: '12px' }}
+                >
+                  Изход
+                </Button>
+              ) : (
+                <Link to={routes.login} onClick={() => setIsMobileDrawerOpen(false)}>
+                  <Button 
+                    block 
+                    type="primary" 
+                    size="large" 
+                    icon={<LoginOutlined />}
+                    style={{ borderRadius: '12px' }}
+                  >
+                    Вход
+                  </Button>
+                </Link>
+              )}
+            </div>
           </div>
         </Drawer>
 

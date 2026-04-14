@@ -353,9 +353,11 @@
   color: var(--text-primary) !important;
   margin-bottom: 16px !important;
   font-size: clamp(2.2rem, 4.8vw, 4.6rem) !important;
-  line-height: 0.98 !important;
+  line-height: 1.1 !important;
   font-weight: 900 !important;
-  max-width: 12ch;
+  word-break: normal !important;
+  overflow-wrap: break-word !important;
+  hyphens: auto;
 }
 
 .home-hero-text {
@@ -505,10 +507,18 @@
 }
 
 .header-navigation-shell {
-  flex: 0 1 760px;
+  display: flex;
+  justify-content: center;
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   padding: 0 8px;
+}
+
+@media (max-width: 768px) {
+  .header-navigation-shell {
+    display: none;
+  }
 }
 
 .header-navigation-shell .app-navigation {
@@ -813,9 +823,17 @@
   bottom: 24px;
 }
 
+.header-actions-desktop {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
 @media (max-width: 992px) {
-  .header-navigation-shell {
-    display: none;
+  .header-navigation-shell,
+  .header-actions-desktop {
+    display: none !important;
   }
 
   .mobile-menu-button {
@@ -835,6 +853,10 @@
 
   .layout .ant-layout-footer {
     padding: 32px 24px !important;
+  }
+
+  .header-actions-desktop {
+    display: none !important;
   }
 
   .events-page-layout {

@@ -96,11 +96,11 @@ const AdminUsers: React.FC = () => {
     <div style={{ maxWidth: '1000px', margin: '0 auto', color: 'var(--text-primary)' }}>
       {contextHolder}
       
-      <div style={{ marginBottom: '32px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+      <div style={{ marginBottom: '32px', display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
         <Link to={routes.home}>
           <Button icon={<ArrowLeftOutlined />} shape="circle" />
         </Link>
-        <Title level={2} style={{ margin: 0, color: 'var(--text-primary)' }}>Управление на потребители</Title>
+        <Title level={2} style={{ margin: 0, color: 'var(--text-primary)', fontSize: 'clamp(1.2rem, 5vw, 1.8rem)' }}>Управление на потребители</Title>
       </div>
 
       <Card 
@@ -120,6 +120,7 @@ const AdminUsers: React.FC = () => {
           columns={columns} 
           rowKey="id"
           pagination={false}
+          scroll={{ x: 'max-content' }}
           locale={{ emptyText: 'Няма специални потребители за управление.' }}
         />
       </Card>

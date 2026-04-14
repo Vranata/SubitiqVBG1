@@ -20,7 +20,12 @@ type UpgradeRequestValues = {
   reason: string;
 };
 
-const UserUpgradePopover: React.FC<{ user: AppUser }> = ({ user }) => {
+type UserUpgradePopoverProps = {
+  user: AppUser;
+  variant?: 'horizontal' | 'vertical';
+};
+
+const UserUpgradePopover: React.FC<UserUpgradePopoverProps> = ({ user, variant = 'horizontal' }) => {
   const [form] = Form.useForm<UpgradeRequestValues>();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -235,7 +240,15 @@ const UserUpgradePopover: React.FC<{ user: AppUser }> = ({ user }) => {
   );
 
   const badge = (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 12 }}>
+    <div 
+      style={{ 
+        display: 'flex', 
+        flexDirection: variant === 'vertical' ? 'column' : 'row',
+        alignItems: 'center', 
+        gap: 8, 
+        marginLeft: variant === 'vertical' ? 0 : 12 
+      }}
+    >
       <Popover
         trigger="hover"
         placement="bottomRight"
@@ -259,8 +272,9 @@ const UserUpgradePopover: React.FC<{ user: AppUser }> = ({ user }) => {
           style={{
             display: 'inline-flex',
             alignItems: 'center',
-            maxWidth: 200,
-            height: 34,
+            width: variant === 'vertical' ? '100%' : 'auto',
+            maxWidth: variant === 'vertical' ? 'none' : 200,
+            height: 38,
             padding: '0 12px',
             borderRadius: 999,
             border: '1px solid var(--toggle-border)',
@@ -284,7 +298,9 @@ const UserUpgradePopover: React.FC<{ user: AppUser }> = ({ user }) => {
             style={{
               display: 'inline-flex',
               alignItems: 'center',
-              height: 34,
+              width: variant === 'vertical' ? '100%' : 'auto',
+              justifyContent: 'center',
+              height: 38,
               padding: '0 12px',
               borderRadius: 999,
               border: '1px solid var(--toggle-border)',
@@ -304,7 +320,9 @@ const UserUpgradePopover: React.FC<{ user: AppUser }> = ({ user }) => {
           style={{
             display: 'inline-flex',
             alignItems: 'center',
-            height: 34,
+            width: variant === 'vertical' ? '100%' : 'auto',
+            justifyContent: 'center',
+            height: 38,
             padding: '0 12px',
             borderRadius: 999,
             border: '1px solid var(--toggle-border)',
