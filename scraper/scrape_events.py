@@ -83,9 +83,30 @@ PROGRAMATA_PATH_CATEGORY_HINTS = [
     ("/kino/", "Кино"),
     ("/muzika/", "Концерти"),
     ("/stsena/", "Театър"),
-    ("/izlozhbi/", "Фестивали"),
-    ("/literatura/", "Фестивали"),
+    ("/izlozhbi/", "Изложби и Галерии"),
+    ("/literatura/", "Литература"),
     ("/gradat/", "Фестивали"),
+]
+
+SCRAPER_KEYWORD_MAPPING = [
+    ("Класическа музика", [r"оркестър", r"симфоничен", r"филхармония", r"квартет", r"камерна музика", r"виолончело", r"моцарт", r"бах", r"бетховен", r"шопен", r"вагнер", r"вивалди", r"класическа музика", r"пиано", r"цигулка"]),
+    ("Клубна музика", [r"диджей", r"dj", r"парти", r"нощен живот", r"nightlife"]),
+    ("Рок и Метъл", [r"рок", r"метъл", r" rock ", r" metal ", r"китара", r"банда", r"хеви", r"heavy metal", r"alternative rock"]),
+    ("Поп и Джаз", [r"поп", r"джаз", r" pop ", r" jazz ", r"саксофон", r"суинг", r"swing"]),
+    ("Народна музика", [r"народна музика", r"фолклор", r"гайда", r"кавал", r"традиционна"]),
+    ("Опера и Балет", [r"балет", r"ария", r"сопран", r"тенор", r" opera ", r" ballet "]),
+    ("Комедия и Stand-up", [r"комедия", r"стендъп", r"stand-up", r"standup", r"хумор", r"comedy"]),
+    ("Танц и Шоу", [r"танц", r"шоу", r"танцов", r"бачата", r"салса", r"фестивал на танца"]),
+    ("Работилници и Занаятчийство", [r"работилница", r"занаят", r"рисуване и вино", r"изкуство", r"курс", r"обучение", r"workshop"]),
+    ("Спорт", [r"спорт", r"мач", r"турнир", r"футбол", r"тенис", r"волейбол", r"баскетбол", r"бягане", r"маратон"]),
+    ("Семейни събития", [r"деца", r"семейство", r"детско", r"куклен театър", r"приказка", r"бебе"]),
+    ("Електронна музика", [r"електронна", r"техно", r"хаус", r"techno", r"house", r"electronic music"]),
+    ("Хип-хоп и R&B", [r"хип-хоп", r"рап", r"rnb", r"r&b", r"hip-hop", r"rap"]),
+    ("Литература", [r"книга", r"литература", r"поезия", r"поет", r"писател", r"представяне на книга"]),
+    ("Изложби и Галерии", [r"изложба", r"галерия", r"картина", r"художник", r"експозиция", r"exhibition", r"gallery"]),
+    ("Семинари и Лекции", [r"лекция", r"семинар", r"конференция", r"webinar", r"уебинар"]),
+    ("Кино", [r"филм", r"кино", r"прожекция", r"cinema", r"movie"]),
+    ("Фестивали", [r"фестивал", r"събор", r"festival"]),
 ]
 
 EVENT_PAYLOAD_KEYS = [
@@ -388,6 +409,11 @@ def parse_programata_schedule_line(value: str, year_hint: int | None = None) -> 
     }
 
 
+def match_scraper_keyword(text: str, keyword: str) -> bool:
+    # Use word boundaries for better accuracy, works with Cyrillic if handled correctly
+    pattern = rf"(^|[^a-zA-Z0-9а-яА-ЯёЁ])({re.escape(keyword.strip())})([^a-zA-Z0-9а-яА-ЯёЁ]|$)"
+    return bool(re.search(pattern, text, re.IGNORECASE | re.UNICODE))
+
 def infer_programata_category_name(
     source_url: str | None,
     page_text: str,
@@ -398,22 +424,33 @@ def infer_programata_category_name(
     url_path = urlparse(source_url or "").path.casefold()
     for path_fragment, category_name in PROGRAMATA_PATH_CATEGORY_HINTS:
         if path_fragment in url_path:
+            # Still check for more specific sub-categories even if URL hint matches a broad one
+            break
+
+    combined_text = " ".join(part for part in [page_text, breadcrumb_text, section_title, card_title] if part)
+    
+    # Special Opera/Ballet hint
+    is_actually_opera = (
+        match_scraper_keyword(combined_text, "опера") or 
+        match_scraper_keyword(combined_text, "балет") or
+        (source_url and ("/stsena/" in url_path or "/opera/" in url_path))
+    )
+
+    for category_name, keywords in SCRAPER_KEYWORD_MAPPING:
+        if category_name == "Опера и Балет" and not is_actually_opera:
+            continue
+            
+        for kw in keywords:
+            if match_scraper_keyword(combined_text, kw):
+                return category_name
+
+    # Check the URL path hints if no keyword matched
+    for path_fragment, category_name in PROGRAMATA_PATH_CATEGORY_HINTS:
+        if path_fragment in url_path:
             return category_name
 
-    combined_text = " ".join(part for part in [page_text, breadcrumb_text, section_title, card_title] if part).casefold()
-
-    if "kino" in combined_text or "филм" in combined_text:
-        return "Кино"
-    if "сцен" in combined_text or "теат" in combined_text:
-        return "Театър"
-    if "музик" in combined_text or "концерт" in combined_text:
-        return "Концерти"
-    if "спорт" in combined_text:
-        return "Спорт"
-    if "фестив" in combined_text:
+    if "фестив" in combined_text.casefold():
         return "Фестивали"
-    if "излож" in combined_text or "литератур" in combined_text or "град" in combined_text:
-        return PROGRAMATA_DEFAULT_CATEGORY_NAME
 
     return PROGRAMATA_DEFAULT_CATEGORY_NAME
 

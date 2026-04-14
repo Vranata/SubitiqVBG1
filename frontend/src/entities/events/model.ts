@@ -426,6 +426,25 @@ export const $selectedDate = createStore<string | null>(null).on(dateChanged, (_
 
 export const $regionOptions = createStore<FilterOption[]>([]).on(fetchRegionsFx.doneData, (_, nextOptions) => nextOptions);
 export const $categoryOptions = createStore<FilterOption[]>([]).on(fetchCategoriesFx.doneData, (_, nextOptions) => nextOptions);
+export const $enrichedCategoryOptions = combine(
+  $categoryOptions,
+  $events,
+  (options, events) => {
+    const today = dayjs().startOf('day');
+    const counts = events.reduce<Record<number, number>>((acc, event) => {
+      if (!dayjs(event.endDate).isBefore(today, 'day')) {
+        acc[event.categoryId] = (acc[event.categoryId] || 0) + 1;
+      }
+      return acc;
+    }, {});
+
+    return options.map(opt => ({
+      ...opt,
+      disabled: !counts[Number(opt.value)],
+      label: `${opt.label}${counts[Number(opt.value)] ? ` (${counts[Number(opt.value)]})` : ''}`,
+    }));
+  }
+);
 
 sample({
   clock: [eventsPageOpened, homePageOpened],

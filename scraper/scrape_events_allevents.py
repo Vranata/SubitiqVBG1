@@ -32,6 +32,8 @@ from scrape_events_programata import (
     normalize_region_key,
     upsert_event,
     verify_supabase_connection,
+    SCRAPER_KEYWORD_MAPPING,
+    match_scraper_keyword,
 )
 
 
@@ -450,14 +452,13 @@ def contains_any(text: str, keywords: tuple[str, ...]) -> bool:
 def infer_allevents_category_name(section_title: str, title: str, location_text: str, description_text: str = "") -> str:
     combined_text = " ".join(part for part in [section_title, title, location_text, description_text] if part)
 
-    if contains_any(combined_text, ALLEVENTS_SPORT_KEYWORDS):
-        return "Спорт"
-    if contains_any(combined_text, ALLEVENTS_CINEMA_KEYWORDS):
-        return "Кино"
-    if contains_any(combined_text, ALLEVENTS_THEATRE_KEYWORDS):
-        return "Театър"
-    if contains_any(combined_text, ALLEVENTS_CONCERT_KEYWORDS):
-        return "Концерти"
+    for category_name, keywords in SCRAPER_KEYWORD_MAPPING:
+        # Since Allevents is mostly English/International, we might want to ensure keywords match
+        # but SCRAPER_KEYWORD_MAPPING already has English terms for some categories.
+        for kw in keywords:
+            if match_scraper_keyword(combined_text, kw):
+                return category_name
+
     return ALLEVENTS_DEFAULT_CATEGORY_NAME
 
 

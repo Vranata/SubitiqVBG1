@@ -9,7 +9,7 @@ import GoogleCalendarButton from '../../components/GoogleCalendarButton';
 import ShareEventButton from '../../components/ShareEventButton';
 import EventEditorModal from '../../components/EventEditorModal';
 import {
-  $categoryOptions,
+  $enrichedCategoryOptions,
   $events,
   $isLoading,
   clearLikedEventIds,
@@ -197,7 +197,7 @@ const Events: React.FC = () => {
     selectedCategoryId: $selectedCategoryId,
     selectedDate: $selectedDate,
     regions: $regionOptions,
-    categories: $categoryOptions,
+    categories: $enrichedCategoryOptions,
     openPage: eventsPageOpened,
     onSearch: searchChanged,
     onRegionChange: regionChanged,
