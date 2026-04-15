@@ -102,13 +102,13 @@ type EventLikeRow = {
 const fallbackImage = '/images/defaults/branded-default.png';
 
 const sortEvents = (events: EventItem[]) => [...events].sort((leftEvent, rightEvent) => {
-  const dateCompare = leftEvent.startDate.localeCompare(rightEvent.startDate);
+  const dateCompare = (leftEvent.startDate || '').localeCompare(rightEvent.startDate || '');
 
   if (dateCompare !== 0) {
     return dateCompare;
   }
 
-  const hourCompare = leftEvent.startHour.localeCompare(rightEvent.startHour);
+  const hourCompare = (leftEvent.startHour || '').localeCompare(rightEvent.startHour || '');
 
   if (hourCompare !== 0) {
     return hourCompare;
